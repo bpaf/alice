@@ -97,7 +97,7 @@ sub BUILD {
     registered     => sub{$self->registered($_)},
     channel_remove => sub{$self->multiple_left(@_)},
     channel_topic  => sub{$self->channel_topic(@_)},
-    join           => sub{$self->_join(@_)},
+    join           => sub{$self->joined(@_)},
     part           => sub{$self->part(@_)},
     nick_change    => sub{$self->nick_change(@_)},
     ctcp_action    => sub{$self->ctcp_action(@_)},
@@ -208,13 +208,6 @@ sub nick {
 sub nick_avatar {
   my $self = shift;
   return $self->avatars->{$_[0]} || "";
-}
-
-sub windows {
-  my $self = shift;
-  return grep
-    {$_->type ne "info" && $_->irc->alias eq $self->alias}
-    $self->app->windows;
 }
 
 sub channels {
@@ -344,10 +337,9 @@ sub disconnected {
   return if $reason eq "reconnect requested.";
   $self->log(info => "disconnected: $reason");
   
-  $_->disabled(1) for grep {$_->is_channel} $self->windows;
+  $self->event(disconnected => $reason, $self->channels);
   
   $self->is_connected(0);
-  
   $self->reconnect(0) unless $self->disabled;
   
   if ($self->removed) {
@@ -362,7 +354,6 @@ sub disconnect {
 
   $self->disabled(1);
 
-  $self->log(debug => "disconnecting: $msg") if $msg;
   $self->send_srv(QUIT => $msg);
 
   $self->{disconnect_timer} = AnyEvent->timer(
@@ -383,58 +374,37 @@ sub remove {
 sub publicmsg {
   my ($self, $cl, $channel, $msg) = @_;
 
-  if (my $window = $self->find_window($channel)) {
-    my ($nick) = split_prefix($msg->{prefix});
-    my $text = $msg->{params}[1];
+  my $text = $msg->{params}[1];
+  my ($nick) = split_prefix($msg->{prefix});
 
-    return if $self->app->is_ignore($nick);
-
-    $self->app->store(nick => $nick, channel => $channel, body => $text);
-    $self->broadcast($window->format_message($nick, $text)); 
-  }
+  $self->event(publicmsg => $channel, $nick, $text);
 }
 
 sub privatemsg {
   my ($self, $cl, $nick, $msg) = @_;
+
+  my ($from) = split_prefix($msg->{prefix});
   my $text = $msg->{params}[1];
 
-  if ($msg->{command} eq "PRIVMSG") {
-    my ($from) = split_prefix($msg->{prefix});
+  $self->event(privatemsg => $from, $from, $text);
+  $self->send_srv(WHO => $from) unless $self->nick_avatar($from);
 
-    return if $self->app->is_ignore($from);
-
-    my $window = $self->window($from);
-
-    $self->app->store(nick => $from, channel => $from, body => $text);
-    $self->broadcast($window->format_message($from, $text)); 
-    $self->send_srv(WHO => $from) unless $self->nick_avatar($from);
-  }
-  elsif ($msg->{command} eq "NOTICE") {
-    $self->log(debug => $text);
-  }
 }
 
 sub ctcp_action {
   my ($self, $cl, $nick, $channel, $msg, $type) = @_;
   return unless $msg;
-  return if $self->app->is_ignore($nick);
 
   my $dest = ($channel eq $self->nick ? $nick : $channel);
-
-  if (my $window = $self->window($dest)) {
-    my $text = "\x{2022} $msg";
-    $self->app->store(nick => $nick, channel => $channel, body => $text);
-    $self->broadcast($window->format_message($nick, $text));
-  }
+  $self->event(ctcp_action => $dest, $msg);
 }
 
 sub nick_change {
   my ($self, $cl, $old_nick, $new_nick, $is_self) = @_;
 
-  $self->broadcast(
-    map  {$_->format_event("nick", $old_nick, $new_nick)}
-    $self->nick_windows($new_nick)
-  );
+
+  my @channels = $self->nick_channels($new_nick)
+  $self->event(nick_change => $old_nick, $new_nick, @channels);
 
   if ($self->avatars->{$old_nick}) {
     $self->avatars->{$new_nick} = delete $self->avatars->{$old_nick};
@@ -445,60 +415,39 @@ sub invite {
   my ($self, $cl, $msg) = @_;
 
   my ($from, $channel) = @{$msg->{params}};
-
-  $self->broadcast({
-    type => "action",
-    event => "announce",
-    body => "$from has invited you to $channel.",
-  });
+  $self->event(invite => $from, $channel);
 }
 
-sub _join {
+sub joined {
   my ($self, $cl, $nick, $channel, $is_self) = @_;
 
+  $self->event(joined => $nick, $channel, $is_self);
+
   if ($is_self) {
-
-    # self->window uses find_or_create, so we don't create
-    # duplicate windows here
-    my $window = $self->window($channel);
-
-    $window->disabled(0) if $window->disabled;
-    $self->broadcast($window->join_action);
-
     # client library only sends WHO if the server doesn't
     # send hostnames with NAMES list (UHNAMES), we to WHO always
     $self->send_srv("WHO" => $channel) if $cl->isupport("UHNAMES");
   }
-  elsif (my $window = $self->find_window($channel)) {
+  else {
     $self->send_srv("WHO" => $nick) unless $self->nick_avatar($nick);
-    $self->broadcast($window->format_event("joined", $nick));
   }
 }
 
 sub part {
   my ($self, $cl, $nick, $channel, $is_self, $msg) = @_;
 
-  if ($is_self and my $window = $self->find_window($channel)) {
-    $self->log(debug => "leaving $channel");
-    $self->app->close_window($window);
-  }
+  $self->event(self_part => $channel) if $is_self;
 }
 
 sub multiple_left {
   my ($self, $cl, $msg, $channel, @nicks) = @_;
-  if (my $window = $self->find_window($channel)) {
-    $self->broadcast(map {$window->format_event("left", $_, $msg->{params}[0])} @nicks);
-  }
+  my $reason = $msg->{params}[0];
+  $self->event(parted => $channel, $reason);
 }
 
 sub channel_topic {
   my ($self, $cl, $channel, $topic, $nick) = @_;
-  if (my $window = $self->find_window($channel)) {
-    $window->disabled(0) if $window->disabled;
-    $topic = irc_to_html($topic, classes => 1, invert => "italic");
-    $window->topic({string => $topic, author => $nick, time => time});
-    $self->broadcast($window->format_event("topic", $nick, $topic));
-  }
+  $self->event(topic => $channel, $nick, $topic);
 }
 
 sub channel_nicks {
@@ -507,10 +456,6 @@ sub channel_nicks {
   return map {
     $mode ? $self->prefix_from_modes($_, $nicks->{$_}).$_ : $_;
   } keys %$nicks;
-}
-
-sub nick_with_prefix {
-  my ($self, $nick, $channel) = @_;
 }
 
 sub prefix_from_modes {
@@ -528,26 +473,11 @@ sub nick_channels {
   grep {any {$nick eq $_} $self->channel_nicks($_)} $self->channels;
 }
 
-sub nick_windows {
-  my ($self, $nick) = @_;
-  if (my @channels = $self->nick_channels($nick)) {
-    return
-      grep {$_}
-      map {$self->find_window($_)}
-      @channels
-  }
-  return ();
-}
-
 sub irc_301 {
   my ($self, $cl, $msg) = @_;
 
   my (undef, $from, $awaymsg) = @{$msg->{params}};
-
-  if (my $window = $self->find_window($from)) {
-    $awaymsg = "$from is away ($awaymsg)";
-    $window->reply($awaymsg);
-  }
+  $self->event(awaymsg => $from, $awaymsg);
 }
 
 sub irc_319 {
@@ -718,132 +648,3 @@ sub mk_msg {
 
 __PACKAGE__->meta->make_immutable;
 1;
-
-=pod
-
-=head1 NAME
-
-Alice::IRC - an Altogether Lovely Internet Chatting Experience
-
-=head2 METHODS
-
-=over 4
-
-=item $irc->connect
-
-Connect to the server. This will not force a reconnect if already
-connected.
-
-
-=item $irc->disconnect
-
-=item $irc->disconnect ($quitmsg)
-
-Sends QUIT with an optional $quitmsg to the server and disconnects.
-
-
-=item $irc->reconnect
-=item $irc->reconnect ($seconds)
-
-Reconnects to the IRC server with an optional $second delay. It will
-continue attempting to reconnect until it succeeds, increasing the
-delay by 15 seconds each time (maxing out at 5 minutes).
-
-
-=item $irc->alias
-
-A short name used to describe this server.
-
-
-=item $irc->is_connected
-
-Returns true if connected to the server.
-
-
-=item $irc->get_nick_info ($nick)
-
-Get WHOIS related information about $nick.
-
-
-=item $irc->send_srv ($cmd, @params)
-
-Send the command to the server and format any parameters.
-
-
-=item $irc->send_raw ($line)
-
-Send the $line as-is to the server.
-
-
-=item $irc->log ($text, %options)
-
-=item $irc->log ([$text, $text, ... $text], %options)
-
-Takes one or more lines to log and an options hash. This lines
-will be sent to the client and printed in the "info" tab.
-
-
-=item $irc->window ($title)
-
-Returns an Alice::Window for this server using $title.
-If one already exists it will be returned, otherwise a new
-Window will be created.
-
-
-=item $irc->find_window ($title)
-
-Find an Alice::Window from this server by $title.
-
-
-=item $irc->nick
-
-The nick being used on this server.
-
-
-=item $irc->windows
-
-Returns a list of Alice::Windows for this server.
-
-
-=item $irc->channels
-
-Returns a list of channel names currently joined for this server.
-
-
-=item $irc->is_channel ($channelname)
-
-This will return a true value if $channelname is a valid channel name
-on this server (e.g. starts with #). This uses the CHANTYPES list
-provided by the server's ISUPPORT line.
-
-
-=item $irc->channel_nicks  ($channelname)
-
-Returns a list of nicks that are in the given $channelname.
-
-
-=item $irc->nick_channels ($nick)
-
-Returns a list of channel names that $nick is in.
-
-
-=item $irc->nick_windows ($nick)
-
-Returns a list of Alice::Windows that $nick is in.
-
-
-=item $irc->nick_avatar ($nick)
-
-Returns the avatar (image URL) for $nick, or undef if there is no avatar. 
-
-
-=item $irc->update_realname ($new_realname)
-
-Update this connection's REALNAME, which will tchange your avatar
-for other alice users. Sends a REALNAME command to the server.
-This command is only understood by the hector IRC server, and
-will be ignored by others.
-
-=back
-
-=cut
