@@ -63,6 +63,11 @@ has app => (
   required => 1,
 );
 
+sub network {
+  my $self = shift;
+  return $self->irc->id;
+}
+
 around disabled => sub {
   my $orig = shift;
   my $self = shift;
@@ -70,14 +75,14 @@ around disabled => sub {
   if (@_) {
     if ($_[0]) {
       $self->app->broadcast(
-        $self->format_event("disconnect", $self->nick, $self->session),
+        $self->format_event("disconnect", $self->nick, $self->network),
         $self->disconnect_action
       );
     }
     else {
       $self->app->broadcast(
         $self->connect_action,
-        $self->format_event("reconnect", $self->nick, $self->session),
+        $self->format_event("reconnect", $self->nick, $self->network),
       );
     }
   }
@@ -119,7 +124,6 @@ has type => (
 
 sub is_channel {$_[0]->type eq "channel"}
 sub irc {$_[0]->_irc}
-sub session {$_[0]->_irc->alias}
 
 sub topic_string {
   my $self = shift;
@@ -133,7 +137,7 @@ sub serialized {
   my ($self) = @_;
   return {
     id         => $self->id, 
-    session    => $self->session,
+    network    => $self->network,
     title      => $self->title,
     is_channel => $self->is_channel,
     type       => $self->type,
@@ -162,7 +166,7 @@ sub connect_action {
   return {
     type => "action",
     event => "connect",
-    session => $self->session,
+    network => $self->network,
     windows => [$self->serialized],
   };
 }
@@ -172,7 +176,7 @@ sub disconnect_action {
   return {
     type => "action",
     event => "disconnect",
-    session => $self->session,
+    network => $self->network,
     windows => [$self->serialized],
   };
 }
@@ -337,7 +341,7 @@ sub hashtag {
   $name =~ s/[#&~@]//g;
   my $path = $self->type eq "privmsg" ? "users" : "channels";
   
-  return "/" . $self->session . "/$path/" . $name;
+  return "/" . $self->network . "/$path/" . $name;
 }
 
 sub is_highlight {

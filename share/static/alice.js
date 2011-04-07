@@ -10406,7 +10406,7 @@ Alice.Application = Class.create({
         }
       }.bind(this));
       if ($('servers')) {
-        Alice.connections.connectServer(action.session);
+        Alice.connections.connectServer(action.network);
       }
     },
     disconnect: function (action) {
@@ -10417,7 +10417,7 @@ Alice.Application = Class.create({
         }
       }.bind(this));
       if ($('servers')) {
-        Alice.connections.disconnectServer(action.session);
+        Alice.connections.disconnectServer(action.network);
       }
     },
     focus: function (action) {
