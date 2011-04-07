@@ -13,7 +13,6 @@ use Any::Moose;
 
 use File::Copy;
 use Text::MicroTemplate::File;
-use Digest::MD5 qw/md5_hex/;
 use List::Util qw/first/;
 use List::MoreUtils qw/any none/;
 use AnyEvent::IRC::Util qw/filter_colors/;
