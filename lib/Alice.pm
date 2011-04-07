@@ -100,6 +100,7 @@ sub log {
   if ($level eq "info") {
     my $network = delete $options{network};
     my $line = $self->info_window->format_message($network, $message, %options);
+    $self->broadcast($line);
   }
 
   if ($self->config->show_debug) {
@@ -227,10 +228,7 @@ sub init_shutdown {
 
 sub shutdown {
   my $self = shift;
-
-  $self->_ircs({});
   $_->close for @{$self->streams};
-  $self->streams([]);
 }
 
 sub reload_commands {
@@ -525,6 +523,11 @@ sub tabsets {
       windows => $self->config->tabsets->{$_},
     );
   } sort keys %{$self->config->tabsets};
+}
+
+sub network_windows {
+  my ($self, $conn) = @_;
+  grep {$_->irc and $_->irc->alias eq $conn->alias} $self->windows;
 }
 
 sub nick_avatar {

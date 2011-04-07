@@ -296,11 +296,11 @@ sub disconnected {
   my ($self, $cl, $reason) = @_;
   delete $self->{disconnect_timer} if $self->{disconnect_timer};
   
-  $reason = "" unless $reason;
+  $reason ||= "";
   return if $reason eq "reconnect requested.";
+
   $self->log(info => "disconnected: $reason");
-  
-  $self->event(disconnected => $reason, $self->channels);
+  $self->event(disconnect => $reason);
   
   $self->is_connected(0);
   $self->reconnect(0) unless $self->disabled;
