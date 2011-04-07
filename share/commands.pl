@@ -149,12 +149,7 @@ my $commands = [
       my ($self, $app, $window, $nick, $network) = @_;
 
       if (my $irc = $self->determine_irc($app, $window, $network)) {
-        $irc->add_whois($nick => sub {
-          $window->reply($_[0] ? $_[0] : "No such nick: $nick\n");
-          if (my $avatar = $irc->nick_avatar($nick)) {
-            $window->reply(Text::MicroTemplate::encoded_string($avatar));
-          }
-        });
+        $irc->add_whois($nick);
       }
     },
   },

@@ -157,26 +157,21 @@ sub send_raw {
 }
 
 sub log {
-  my ($self, $level, $msg) = @_;
-  warn "$level: $msg\n";
+  my ($self, $level, $msg, %options) = @_;
+  $self->event('log' => $level, $msg, network => $self->alias, %options);
 }
 
 sub log_message {
   my ($self, $message) = @_;
 
   if (@{$message->{params}}) {
-    $self->log("debug", pop @{$message->{params}});
+    $self->log("info", pop @{$message->{params}}, mono => 1);
   }
 }
 
 sub nick {
   my $self = shift;
   my $nick = $self->cl->nick || $self->config->{nick} || "";
-}
-
-sub nick_realname {
-  my $self = shift;
-  return $self->realnames->{$_[0]} || "";
 }
 
 sub channels {
@@ -200,7 +195,7 @@ sub connect {
 
   $self->reconnect_count > 1 ? 
     $self->log(info => "reconnecting: attempt " . $self->reconnect_count)
-  : $self->log(debug => "connecting");
+  : $self->log(info => "connecting");
 
   $self->cl->connect(
     $self->config->{host}, $self->config->{port}
@@ -238,7 +233,7 @@ sub reconnect {
 
   if ($interval < 15) {
     $time = 15 - $interval;
-    $self->log(debug => "last attempt was within 15 seconds, delaying $time seconds")
+    $self->log(info => "last attempt was within 15 seconds, delaying $time seconds")
   }
 
   if (!defined $time) {
@@ -246,7 +241,7 @@ sub reconnect {
     $time = min 60 * 5, 15 * $self->reconnect_count;
   }
 
-  $self->log(debug => "reconnecting in $time seconds");
+  $self->log(info => "reconnecting in $time seconds");
   $self->reconnect_timer(
     AnyEvent->timer(after => $time, cb => sub {
       $self->connect unless $self->is_connected;
@@ -274,7 +269,7 @@ sub registered {
   push @commands, map {
     my $command = $_;
     sub {
-      $self->log(debug => "sending $command");
+      $self->log(info => "sending $command");
       $self->send_raw($command);
     }
   } @{$self->config->{on_connect}};
@@ -282,7 +277,7 @@ sub registered {
   push @commands, map {
     my $channel = $_;
     sub {
-      $self->log(debug => "joining $channel");
+      $self->log(info => "joining $channel");
       $self->send_srv("JOIN", split /\s+/, $channel);
     }
   } @channels; 
@@ -350,12 +345,14 @@ sub publicmsg {
 sub privatemsg {
   my ($self, $cl, $nick, $msg) = @_;
 
-  my ($from) = split_prefix($msg->{prefix});
-  my $text = $msg->{params}[1];
-
-  $self->event(privatemsg => $from, $text);
-  $self->send_srv(WHO => $from) unless $self->realnames->{$from};
-
+  if ($msg->{command} eq "PRIVMSG") {
+    my ($from) = split_prefix($msg->{prefix});
+    my $text = $msg->{params}[1];
+    $self->event(privatemsg => $from, $text);
+    $self->send_srv(WHO => $from) unless $self->realnames->{$from};
+  }
+  elsif ($msg->{command} eq "NOTICE") {
+  }
 }
 
 sub ctcp_action {
@@ -391,7 +388,8 @@ sub joined {
     $self->send_srv("WHO" => $channel) if $cl->isupport("UHNAMES");
   }
   else {
-    $self->event(joined => $nick, $channel);
+    $self->event('join' => $nick, $channel);
+    $self->event(nicklist_update => $channel, $self->channel_nicks($channel));
     $self->send_srv("WHO" => $nick) unless $self->realnames->{$nick};
   }
 }
@@ -405,6 +403,7 @@ sub multiple_left {
   my ($self, $cl, $msg, $channel, @nicks) = @_;
   my $reason = $msg->{params}[0];
   $self->event(parted => $channel, $reason);
+  $self->event(nicklist_update => $channel, $self->channel_nicks($channel));
 }
 
 sub channel_topic {
@@ -469,6 +468,7 @@ sub irc_352 {
   my $real = join "", @real;
   $real =~ s/^[0-9*] //;
   $self->realnames->{$nick} = $real;
+  $self->event(realname_change => $nick, $real);
 }
 
 sub irc_311 {
@@ -483,6 +483,7 @@ sub irc_311 {
   my ($nick, $user, $address, undef, $real) = @{$msg->{params}};
 
   $self->realnames->{$nick} = $real;
+  $self->event(realname_change => $real);
 
   if (my $whois = $self->whois->{lc $nick}) {
     $whois->{nick} = $nick;
@@ -540,7 +541,7 @@ sub update_realname {
   $self->send_srv(REALNAME => $realname);
 
   $self->realnames->{$self->nick} = $realname;
-  $self->event(avatar_change => realname_avatar($realname));
+  $self->event(realname_change => $realname);
 }
 
 sub is_channel {

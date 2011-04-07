@@ -6,7 +6,6 @@ use Alice::InfoWindow;
 use Alice::HTTPD;
 use Alice::IRC;
 use Alice::Config;
-use Alice::Logger;
 use Alice::History;
 use Alice::Tabset;
 
@@ -22,9 +21,6 @@ use IRC::Formatting::HTML qw/html_to_irc/;
 use Encode;
 
 our $VERSION = '0.19';
-
-my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
-my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
 
 with 'Alice::Events';
 
@@ -43,7 +39,7 @@ sub ircs {values %{$_[0]->_ircs}}
 sub add_irc {$_[0]->_ircs->{$_[1]->alias} = $_[1]}
 sub has_irc {$_[0]->get_irc($_[1])}
 sub get_irc {$_[0]->_ircs->{$_[1]}}
-sub remove_irc {delete $_[0]->_ircs->{$_[1]}}
+sub remove_irc {delete $_[0]->_ircs->{$_[1]->alias}}
 sub connected_ircs {grep {$_->is_connected} $_[0]->ircs}
 
 has httpd => (
@@ -85,12 +81,6 @@ has history => (
   },
 );
 
-has avatars => (
-  is => 'rw',
-  isa => 'HashRef',
-  default => sub{{}},
-);
-
 sub store {
   my ($self, @args) = @_;
   return unless $self->config->logging;
@@ -104,12 +94,22 @@ sub store {
   };
 }
 
-has logger => (
-  is        => 'ro',
-  default   => sub {Alice::Logger->new},
-);
+sub log {
+  my ($self, $level, $message, %options) = @_;
 
-sub log {$_[0]->logger->log($_[1] => $_[2]) if $_[0]->config->show_debug}
+  if ($level eq "info") {
+    my $network = delete $options{network};
+    my $line = $self->info_window->format_message($network, $message, %options);
+  }
+
+  if ($self->config->show_debug) {
+    my ($sec, $min, $hour, $day, $mon, $year) = localtime(time);
+    my $datestring = sprintf "%02d:%02d:%02d %02d/%02d/%02d",
+                     $hour, $min, $sec, $mon, $day, $year % 100;
+    print STDERR substr($level, 0, 1) . ", [$datestring] "
+               . sprintf("% 5s", $level) . " -- : $message\n";
+  }
+}
 
 has _windows => (
   is        => 'rw',
@@ -158,12 +158,17 @@ has 'user' => (
   default => $ENV{USER}
 );
 
+has avatars => (
+  is => 'rw',
+  default => sub {{}},
+);
+
 sub BUILDARGS {
   my ($class, %options) = @_;
 
   my $self = {};
 
-  for (qw/logger commands history template user httpd/) {
+  for (qw/commands history template user httpd/) {
     if (exists $options{$_}) {
       $self->{$_} = $options{$_};
       delete $options{$_};
@@ -277,11 +282,6 @@ sub create_window {
   );
   $self->add_window($window);
   return $window;
-}
-
-sub nick_avatar {
-  my ($self, $nick) = @_;
-  return $self->avatars->{$nick};
 }
 
 sub _build_window_id {
@@ -527,19 +527,9 @@ sub tabsets {
   } sort keys %{$self->config->tabsets};
 }
 
-sub realname_avatar {
-  my $realname = shift;
-
-  if ($realname =~ $email_re) {
-    my $email = $1;
-    return "http://www.gravatar.com/avatar/"
-           . md5_hex($email) . "?s=32&amp;r=x";
-  }
-  elsif ($realname =~ $image_re) {
-    return $1;
-  }
-
-  return ();
+sub nick_avatar {
+  my ($self, $nick) = @_;
+  return $self->avatars->{$nick};
 }
 
 __PACKAGE__->meta->make_immutable;

@@ -221,7 +221,7 @@ sub setup_xhr_stream {
 sub setup_ws_stream {
   my ($self, $req, $res) = @_;
   my $app = $self->app;
-  $app->log(info => "opening new websocket stream");
+  $app->log(debug => "opening new websocket stream");
 
   if (my $fh = $req->env->{'websocket.impl'}->handshake) {
     my $stream = Alice::Stream::WebSocket->new(
@@ -323,7 +323,7 @@ sub template {
 
 sub save_tabsets {
   my ($self, $req, $res) = @_;
-  $self->app->log(info => "saving tabsets");
+  $self->app->log(info => "saving tabsets", from => "config");
 
   my $tabsets = {};
 
@@ -342,7 +342,7 @@ sub save_tabsets {
 
 sub server_config {
   my ($self, $req, $res) = @_;
-  $self->app->log(info => "serving blank server config");
+  $self->app->log(debug => "serving blank server config");
   
   my $name = $req->param('name');
   $name =~ s/\s+//g;
@@ -360,7 +360,7 @@ sub server_config {
 
 sub save_config {
   my ($self, $req, $res) = @_;
-  $self->app->log(info => "saving config");
+  $self->app->log(info => "saving config", from => "config");
   
   my $new_config = {};
   if ($req->param('has_servers')) {
