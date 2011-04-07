@@ -340,7 +340,7 @@ sub reload_config {
   for my $network (keys %{$self->config->servers}) {
     my $config = $self->config->servers->{$network};
     if (!$self->has_connection($network)) {
-      $self->create_connection($network, $config);
+      $self->add_new_connection($network, $config);
     }
     else {
       my $connection = $self->get_connection($network);
@@ -524,7 +524,7 @@ sub tabsets {
   } sort keys %{$self->config->tabsets};
 }
 
-sub network_windows {
+sub connection_windows {
   my ($self, $conn) = @_;
   grep {$_->network eq $conn->id} $self->windows;
 }
