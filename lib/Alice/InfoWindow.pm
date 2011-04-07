@@ -7,9 +7,9 @@ use Text::MicroTemplate qw/encoded_string/;
 
 extends 'Alice::Window';
 
+has '+network' => (required => 0, default => '');
 has '+title' => (required => 0, default => 'info');
 has 'topic' => (is => 'ro', isa => 'HashRef', default => sub {{string => ''}});
-has '+_connection' => (required => 0, isa => 'Any');
 has '+type' => (is => 'ro', default => "info");
 
 #
@@ -18,14 +18,7 @@ has '+type' => (is => 'ro', default => "info");
 #
 
 sub is_channel {0}
-sub network {""}
 sub all_nicks {[]}
-
-sub connection {
-  my $self = shift;
-  return ($self->app->open_connections)[0] if $self->app->open_connections == 1;
-  return undef;
-}
 
 sub format_message {
   my ($self, $from, $body, %options) = @_;

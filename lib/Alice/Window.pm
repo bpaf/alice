@@ -13,13 +13,7 @@ my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\
 has buffer => (
   is      => 'rw',
   isa     => 'Alice::MessageBuffer',
-  lazy    => 1,
-  default => sub {
-    Alice::MessageBuffer->new(
-      id => $_[0]->id,
-      store_class => $_[0]->app->config->message_store,
-    );
-  },
+  required => 1,
 );
 
 has title => (
@@ -43,40 +37,21 @@ has id => (
   required => 1,
 );
 
-has _connection => (
-  is       => 'ro',
-  required => 1,
-  weak_ref => 1,
-);
-
 has disabled => (
   is       => 'rw',
   isa      => 'Bool',
   default  => 0,
 );
 
-has app => (
-  is      => 'ro',
-  isa     => 'Alice',
-  weak_ref => 1,
-  required => 1,
+has nicks => (
+  is => 'rw',
+  default => sub {[]},
 );
 
-sub network {
-  my $self = shift;
-  return $self->connection->id;
-}
-
-# move connection arg to _connection, which is wrapped in a method
-# because infowindow has logic to choose which 
-# connection to return
-sub BUILDARGS {
-  my $class = shift;
-  my $args = ref $_[0] ? $_[0] : {@_};
-  $args->{_connection} = $args->{connection};
-  delete $args->{connection};
-  return $args;
-}
+has network => (
+  is => 'ro',
+  required => 1
+);
 
 sub sort_name {
   my $name = lc $_[0]->title;
@@ -96,12 +71,11 @@ has type => (
   is => 'ro',
   lazy => 1,
   default => sub {
-    $_[0]->connection->is_channel($_[0]->title) ? "channel" : "privmsg";
+    $_[0]->title =~ /^#|&/ ? "channel" : "privmsg";
   },
 );
 
 sub is_channel {$_[0]->type eq "channel"}
-sub connection {$_[0]->_connection}
 
 sub topic_string {
   my $self = shift;
@@ -126,17 +100,12 @@ sub serialized {
 
 sub render {shift->app->render(@_)}
 
-sub nick {
-  my $self = shift;
-  return $self->connection->nick;
-}
-
 sub all_nicks {
   my ($self, $modes) = @_;
 
   return $self->is_channel ?
-         [ $self->connection->channel_nicks($self->title, $modes) ]
-       : [ $self->title, $self->nick ];
+         [ $self->nicks($self->title, $modes) ]
+       : [ $self->title ];
 }
 
 sub connect_action {
@@ -320,21 +289,6 @@ sub hashtag {
   my $path = $self->type eq "privmsg" ? "users" : "channels";
   
   return "/" . $self->network . "/$path/" . $name;
-}
-
-sub is_highlight {
-  my ($self, $body) = @_;
-  return $self->app->is_highlight($self->nick, $body);
-}
-
-sub reply {
-  my ($self, $message) = @_;
-  $self->app->broadcast($self->format_announcement($message));
-}
-
-sub show {
-  my ($self, $message) = @_;
-  $self->app->broadcast($self->format_message($self->nick, $message));
 }
 
 __PACKAGE__->meta->make_immutable;

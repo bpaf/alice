@@ -151,7 +151,7 @@ on disconnect => sub {
   my @windows = $self->connection_windows($connection);
 
   $_->disabled(1) for @windows;
-  my @events = map {$_->format_event("disconnect", $_->nick, $_->network)} @windows;
+  my @events = map {$_->format_event("disconnect", "You", $_->network)} @windows;
 
   $self->broadcast(
     @events,
@@ -188,6 +188,7 @@ on nicklist_update => sub {
   my ($self, $connection, $channel, @nicks) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
+    $window->nicks(\@nicks);
     if ($window->disabled) {
       $window->disabled(0);
       $self->broadcast($window->connect_action);
