@@ -141,7 +141,7 @@ on topic => sub {
 
 on disconnect => sub {
   my ($self, $connection, $reason) = @_;
-  $_->disabled(1) for $self->network_windows($connection);
+  $_->disabled(1) for $self->connection_windows($connection);
 };
 
 on awaymsg => sub {
@@ -185,7 +185,7 @@ on realname_change => sub {
 };
 
 on shutdown => sub {
-  my ($self, $connection) = shift;
+  my ($self, $connection) = @_;
   delete $connection->{reg_guard};
   $self->remove_connection($connection);
 };

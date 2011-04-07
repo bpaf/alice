@@ -88,7 +88,10 @@ sub _build_httpd {
         enable "WebSocket";
         sub {
           my $env = shift;
-          return sub {$self->dispatch($env, shift)}
+          return sub {
+            eval { $self->dispatch($env, shift) };
+            warn $@ if $@;
+          }
         }
       }
     );
