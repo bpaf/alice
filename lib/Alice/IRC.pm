@@ -3,15 +3,12 @@ package Alice::IRC;
 use AnyEvent;
 use AnyEvent::IRC::Client;
 use AnyEvent::IRC::Util qw/split_prefix parse_irc_msg/;
-use IRC::Formatting::HTML qw/irc_to_html/;
 use List::Util qw/min first/;
 use List::MoreUtils qw/uniq none any/;
-use Digest::MD5 qw/md5_hex/;
 use Any::Moose;
 use Encode;
 
-my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
-my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
+use parent 'Object::Event';
 
 {
   no warnings;
@@ -34,21 +31,15 @@ has 'cl' => (
   default => sub {AnyEvent::IRC::Client->new(send_initial_whois => 1)},
 );
 
-has 'alias' => (
-  isa      => 'Str',
-  is       => 'ro',
+has config => (
+  is => 'rw',
+  isa => 'HashRef',
   required => 1,
 );
 
-sub config {
-  $_[0]->app->config->servers->{$_[0]->alias};
-}
-
-has 'app' => (
-  isa      => 'Alice',
-  is       => 'ro',
-  weak_ref => 1,
-  required => 1,
+has quitmsg => (
+  is => 'rw',
+  default => "alice.",
 );
 
 has 'reconnect_timer' => (
@@ -76,16 +67,21 @@ has whois => (
   default   => sub {{}},
 );
 
-has avatars => (
+has realnames => (
   is        => 'rw',
   isa       => 'HashRef',
   default   => sub {{}},
 );
 
+sub alias {
+  my $self = shift;
+  return $self->config->{name};
+}
+
 sub add_whois {
-  my ($self, $nick, $cb) = @_;
+  my ($self, $nick) = @_;
   $nick = lc $nick;
-  $self->whois->{$nick} = {info => "", cb => $cb};
+  $self->whois->{$nick} = {};
   $self->send_srv(WHOIS => $nick);
 }
 
@@ -97,13 +93,13 @@ sub BUILD {
     registered     => sub{$self->registered($_)},
     channel_remove => sub{$self->multiple_left(@_)},
     channel_topic  => sub{$self->channel_topic(@_)},
-    join           => sub{$self->joined(@_)},
+    'join'         => sub{$self->joined(@_)},
     part           => sub{$self->part(@_)},
     nick_change    => sub{$self->nick_change(@_)},
     ctcp_action    => sub{$self->ctcp_action(@_)},
     publicmsg      => sub{$self->publicmsg(@_)},
     privatemsg     => sub{$self->privatemsg(@_)},
-    connect        => sub{$self->connected(@_)},
+    'connect'      => sub{$self->connected(@_)},
     disconnect     => sub{$self->disconnected(@_)},
     irc_invite     => sub{$self->invite(@_)},
     irc_001        => sub{$self->log_message($_[1])},
@@ -116,9 +112,9 @@ sub BUILD {
     irc_319        => sub{$self->irc_319(@_)}, # WHOIS channels
     irc_318        => sub{$self->irc_318(@_)}, # end of WHOIS
     irc_366        => sub{$self->irc_366(@_)}, # end of NAMES
-    irc_372        => sub{$self->log_message(mono => 1, $_[1])}, # MOTD info
-    irc_377        => sub{$self->log_message(mono => 1, $_[1])}, # MOTD info
-    irc_378        => sub{$self->log_message(mono => 1, $_[1])}, # MOTD info
+    irc_372        => sub{$self->log_message($_[1])}, # MOTD info
+    irc_377        => sub{$self->log_message($_[1])}, # MOTD info
+    irc_378        => sub{$self->log_message($_[1])}, # MOTD info
     irc_401        => sub{$self->irc_401(@_)}, # not a nick
     irc_471        => sub{$self->log_message($_[1])}, # JOIN fail
     irc_473        => sub{$self->log_message($_[1])}, # JOIN fail
@@ -160,44 +156,17 @@ sub send_raw {
   $self->cl->send_raw(encode "utf8", $_[0]);
 }
 
-sub broadcast {
-  my $self = shift;
-  $self->app->broadcast(@_);
-}
-
 sub log {
-  my $messages = pop;
-  $messages = [ $messages ] unless ref $messages eq "ARRAY";
-
-  my ($self, $level, %options) = @_;
-
-  my @lines = map {$self->format_info($_, %options)} @$messages;
-  $self->broadcast(@lines);
-  $self->app->log($level => "[".$self->alias . "] $_") for @$messages;
+  my ($self, $level, $msg) = @_;
+  warn "$level: $msg\n";
 }
 
 sub log_message {
-  my $message = pop;
+  my ($self, $message) = @_;
 
-  my ($self, %options) = @_;
   if (@{$message->{params}}) {
-    $self->log("debug", %options, [ pop @{$message->{params}} ]);
+    $self->log("debug", pop @{$message->{params}});
   }
-}
-
-sub format_info {
-  my ($self, $message, %options) = @_;
-  $self->app->format_info($self->alias, $message, %options);
-}
-
-sub window {
-  my ($self, $title) = @_;
-  return $self->app->find_or_create_window($title, $self);
-}
-
-sub find_window {
-  my ($self, $title) = @_;
-  return $self->app->find_window($title, $self);
 }
 
 sub nick {
@@ -205,9 +174,9 @@ sub nick {
   my $nick = $self->cl->nick || $self->config->{nick} || "";
 }
 
-sub nick_avatar {
+sub nick_realname {
   my $self = shift;
-  return $self->avatars->{$_[0]} || "";
+  return $self->realnames->{$_[0]} || "";
 }
 
 sub channels {
@@ -293,7 +262,6 @@ sub cancel_reconnect {
 
 sub registered {
   my $self = shift;
-  my @log;
 
   $self->cl->enable_ping (300, sub {
     $self->disconnected("ping timeout");
@@ -343,14 +311,13 @@ sub disconnected {
   $self->reconnect(0) unless $self->disabled;
   
   if ($self->removed) {
-    $self->app->remove_irc($self->alias);
-    undef $self;
+    $self->event("remove");
   }
 }
 
 sub disconnect {
   my ($self, $msg) = @_;
-  $msg ||= $self->app->config->quitmsg;
+  $msg ||= $self->quitmsg;
 
   $self->disabled(1);
 
@@ -386,8 +353,8 @@ sub privatemsg {
   my ($from) = split_prefix($msg->{prefix});
   my $text = $msg->{params}[1];
 
-  $self->event(privatemsg => $from, $from, $text);
-  $self->send_srv(WHO => $from) unless $self->nick_avatar($from);
+  $self->event(privatemsg => $from, $text);
+  $self->send_srv(WHO => $from) unless $self->realnames->{$from};
 
 }
 
@@ -402,13 +369,9 @@ sub ctcp_action {
 sub nick_change {
   my ($self, $cl, $old_nick, $new_nick, $is_self) = @_;
 
-
-  my @channels = $self->nick_channels($new_nick)
+  my @channels = $self->nick_channels($new_nick);
+  $self->realnames->{$new_nick} = delete $self->realnames->{$old_nick};
   $self->event(nick_change => $old_nick, $new_nick, @channels);
-
-  if ($self->avatars->{$old_nick}) {
-    $self->avatars->{$new_nick} = delete $self->avatars->{$old_nick};
-  }
 }
 
 sub invite {
@@ -421,21 +384,20 @@ sub invite {
 sub joined {
   my ($self, $cl, $nick, $channel, $is_self) = @_;
 
-  $self->event(joined => $nick, $channel, $is_self);
-
   if ($is_self) {
+    $self->event(self_join => $channel);
     # client library only sends WHO if the server doesn't
     # send hostnames with NAMES list (UHNAMES), we to WHO always
     $self->send_srv("WHO" => $channel) if $cl->isupport("UHNAMES");
   }
   else {
-    $self->send_srv("WHO" => $nick) unless $self->nick_avatar($nick);
+    $self->event(joined => $nick, $channel);
+    $self->send_srv("WHO" => $nick) unless $self->realnames->{$nick};
   }
 }
 
 sub part {
   my ($self, $cl, $nick, $channel, $is_self, $msg) = @_;
-
   $self->event(self_part => $channel) if $is_self;
 }
 
@@ -486,14 +448,14 @@ sub irc_319 {
   # ignore the first param if it is our own nick, some servers include it
   shift @{$msg->{params}} if $msg->{params}[0] eq $self->nick;
 
-  my ($nick, $channels) = @{$msg->{params}};
+  my $nick = $msg->{params}[0];
+  my @channels = split /\s+/, $msg->{params}[1];
 
   if (my $whois = $self->whois->{lc $nick}) {
-    $whois->{info} .= "\nchannels: " .
-    join " ", map {
+    $whois->{channels} =  [ map {
       my $modes = $self->cl->nick_modes($nick, $_);
       $self->prefix_from_modes($nick, $modes) . $_;
-    } split /\s+/, $channels;
+    } @channels ];
   }
 }
 
@@ -506,9 +468,7 @@ sub irc_352 {
   my (undef, undef, undef, undef, $nick, undef, @real) = @{$msg->{params}};
   my $real = join "", @real;
   $real =~ s/^[0-9*] //;
-  if (my $avatar = $self->realname_avatar($real)) {
-    $self->avatars->{$nick} = $avatar;
-  }
+  $self->realnames->{$nick} = $real;
 }
 
 sub irc_311 {
@@ -522,15 +482,13 @@ sub irc_311 {
 
   my ($nick, $user, $address, undef, $real) = @{$msg->{params}};
 
-  if (my $avatar = $self->realname_avatar($real)) {
-    $self->avatars->{$nick} = $avatar;
-  }
+  $self->realnames->{$nick} = $real;
 
   if (my $whois = $self->whois->{lc $nick}) {
-    $whois->{info} .= "nick: $nick"
-                    .  "\nuser: $user"
-                    .  "\nreal: $real"
-                    .  "\nIP: $address";
+    $whois->{nick} = $nick;
+    $whois->{user} = $user;
+    $whois->{real} = $real;
+    $whois->{IP} = $address;
   }
 }
 
@@ -543,7 +501,7 @@ sub irc_312 {
   my ($nick, $server) = @{$msg->{params}};
 
   if (my $whois = $self->whois->{lc $nick}) {
-    $whois->{info} .= "\nserver: $server";
+    $whois->{server} = $server;
   }
 }
 
@@ -556,55 +514,33 @@ sub irc_318 {
   my $nick = $msg->{params}[0];
 
   if (my $whois = $self->whois->{lc $nick}) {
-    $whois->{cb}->($whois->{info});
-    delete $self->whois->{lc $nick};
+    my $info = delete $self->whois->{lc $nick};
+    $self->event(whois => $nick, $info);
   }
 }
 
 sub irc_366 {
   my ($self, $cl, $msg) = @_;
-  if (my $window = $self->find_window($msg->{params}[1])) {
-    $window->disabled(0) if $window->disabled;
-    $self->broadcast($window->nicks_action);
-  }
+  my $channel = $msg->{params}[1];
+  $self->event(nicklist_update => $channel, $self->channel_nicks($channel));
 }
 
 sub irc_401 {
   my ($self, $cl, $msg) = @_;
-  if (my $window = $self->find_window($msg->{params}[1])) {
-    $self->broadcast($window->format_announcement("No such nick."));
-  }
+
+  $self->event(not_nick => $msg->{params}[1]);
   
   if ($self->whois->{$msg->{params}[1]}) {
-    $self->whois->{$msg->{params}[1]}{cb}->();
     delete $self->whois->{$msg->{params}[1]};
   }
-}
-
-sub realname_avatar {
-  my ($self, $realname) = @_;
-
-  if ($realname =~ $email_re) {
-    my $email = $1;
-    return "http://www.gravatar.com/avatar/"
-           . md5_hex($email) . "?s=32&amp;r=x";
-  }
-  elsif ($realname =~ $image_re) {
-    return $1;
-  }
-
-  return ();
 }
 
 sub update_realname {
   my ($self, $realname) = @_;
   $self->send_srv(REALNAME => $realname);
 
-  $self->avatars->{$self->nick} = $self->realname_avatar($realname);
-
-  for (grep {$_->previous_nick eq $self->nick} $self->windows) {
-    $_->reset_previous_nick;
-  }
+  $self->realnames->{$self->nick} = $realname;
+  $self->event(avatar_change => realname_avatar($realname));
 }
 
 sub is_channel {
