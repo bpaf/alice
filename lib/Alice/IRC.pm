@@ -451,10 +451,10 @@ sub irc_319 {
   my @channels = split /\s+/, $msg->{params}[1];
 
   if (my $whois = $self->whois->{lc $nick}) {
-    $whois->{channels} =  [ map {
+    $whois->{channels} =  join " ", map {
       my $modes = $self->cl->nick_modes($nick, $_);
       $self->prefix_from_modes($nick, $modes) . $_;
-    } @channels ];
+    } @channels;
   }
 }
 

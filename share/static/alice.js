@@ -11683,7 +11683,7 @@ Alice.Window = Class.create({
 
   announce: function (message) {
     this.messages.insert(
-      "<li class='message announce'><div class='msg'>"+message+"</div></li>"
+      "<li class='message announce monospaced'><div class='msg'>"+message+"</div></li>"
     );
     this.scrollToBottom();
   },
