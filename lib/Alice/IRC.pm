@@ -73,7 +73,7 @@ has realnames => (
   default   => sub {{}},
 );
 
-sub alias {
+sub id {
   my $self = shift;
   return $self->config->{name};
 }
@@ -158,7 +158,7 @@ sub send_raw {
 
 sub log {
   my ($self, $level, $msg, %options) = @_;
-  $self->event('log' => $level, $msg, network => $self->alias, %options);
+  $self->event('log' => $level, $msg, %options);
 }
 
 sub log_message {

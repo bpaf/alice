@@ -323,7 +323,7 @@ sub template {
 
 sub save_tabsets {
   my ($self, $req, $res) = @_;
-  $self->app->log(info => "saving tabsets", from => "config");
+  $self->app->log(info => "saving tabsets");
 
   my $tabsets = {};
 
@@ -360,7 +360,7 @@ sub server_config {
 
 sub save_config {
   my ($self, $req, $res) = @_;
-  $self->app->log(info => "saving config", from => "config");
+  $self->app->log(info => "saving config");
   
   my $new_config = {};
   if ($req->param('has_servers')) {

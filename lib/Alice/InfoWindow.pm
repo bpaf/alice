@@ -18,7 +18,7 @@ has '+type' => (is => 'ro', default => "info");
 #
 
 sub is_channel {0}
-sub session {""}
+sub network {""}
 sub all_nicks {[]}
 
 sub irc {

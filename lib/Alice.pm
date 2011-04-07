@@ -35,7 +35,7 @@ has _ircs => (
 );
 
 sub ircs {values %{$_[0]->_ircs}}
-sub add_irc {$_[0]->_ircs->{$_[1]->alias} = $_[1]}
+sub add_irc {$_[0]->_ircs->{$_[1]->id} = $_[1]}
 sub has_irc {$_[0]->get_irc($_[1])}
 sub get_irc {$_[0]->_ircs->{$_[1]}}
 sub remove_irc {delete $_[0]->_ircs->{$_[1]->alias}}
@@ -97,8 +97,8 @@ sub log {
   my ($self, $level, $message, %options) = @_;
 
   if ($level eq "info") {
-    my $network = delete $options{network};
-    my $line = $self->info_window->format_message($network, $message, %options);
+    my $from = delete $options{network} || "config";
+    my $line = $self->info_window->format_message($from, $message, %options);
     $self->broadcast($line);
   }
 
@@ -113,16 +113,16 @@ sub log {
 
 has _windows => (
   is        => 'rw',
-  isa       => 'ArrayRef',
-  default   => sub {[]},
+  isa       => 'HashRef',
+  default   => sub {{}},
 );
 
-sub windows {@{$_[0]->_windows}}
-sub add_window {push @{$_[0]->_windows}, $_[1]}
+sub windows {values %{$_[0]->_windows}}
+sub add_window {$_[0]->_windows->{$_[1]->id} = $_[1]}
 sub has_window {$_[0]->get_window($_[1])}
-sub get_window {first {$_->id eq $_[1]} $_[0]->windows}
-sub remove_window {$_[0]->_windows([grep {$_->id ne $_[1]} $_[0]->windows])}
-sub window_ids {map {$_->id} $_[0]->windows}
+sub get_window {$_[0]->_windows->{$_[1]}}
+sub remove_window {delete $_[0]->_windows->{$_[1]}}
+sub window_ids {keys %{$_[0]->_windows}}
 
 has 'template' => (
   is => 'ro',
@@ -241,7 +241,7 @@ sub tab_order {
   for my $count (0 .. scalar @$window_ids - 1) {
     if (my $window = $self->get_window($window_ids->[$count])) {
       next unless $window->is_channel
-           and $self->config->servers->{$window->irc->alias};
+           and $self->config->servers->{$window->irc->id};
       push @$order, $window->title;
     }
   }
@@ -252,7 +252,7 @@ sub tab_order {
 sub find_window {
   my ($self, $title, $irc) = @_;
   return $self->info_window if $title eq "info";
-  my $id = $self->_build_window_id($title, $irc->alias);
+  my $id = $self->_build_window_id($title, $irc->id);
   if (my $window = $self->get_window($id)) {
     return $window;
   }
@@ -275,15 +275,15 @@ sub create_window {
     irc      => $irc,
     assetdir => $self->config->assetdir,
     app      => $self,
-    id       => $self->_build_window_id($title, $irc->alias), 
+    id       => $self->_build_window_id($title, $irc->id), 
   );
   $self->add_window($window);
   return $window;
 }
 
 sub _build_window_id {
-  my ($self, $title, $session) = @_;
-  md5_hex(encode_utf8(lc $self->user."-$title-$session"));
+  my ($self, $title, $network) = @_;
+  md5_hex(lc $self->user."-$title-$network");
 }
 
 sub find_or_create_window {
