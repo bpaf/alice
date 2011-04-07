@@ -36,7 +36,6 @@ sub on ($&) {
 
 on 'log' => sub {
   my ($self, $conn, $level, $message, %options) = @_;
-  my $info = $self->info_window;
   $self->log($level, $message, %options);
 };
 
@@ -160,7 +159,7 @@ on nicklist_update => sub {
   }
 };
 
-on notnick => sub {
+on not_nick => sub {
   my ($self, $conn, $nick) = @_;
 
   if (my $window = $self->find_window($nick, $conn)) {
