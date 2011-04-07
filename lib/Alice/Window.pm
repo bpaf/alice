@@ -67,27 +67,6 @@ sub network {
   return $self->connection->id;
 }
 
-around disabled => sub {
-  my $orig = shift;
-  my $self = shift;
-
-  if (@_) {
-    if ($_[0]) {
-      $self->app->broadcast(
-        $self->format_event("disconnect", $self->nick, $self->network),
-        $self->disconnect_action
-      );
-    }
-    else {
-      $self->app->broadcast(
-        $self->connect_action,
-        $self->format_event("reconnect", $self->nick, $self->network),
-      );
-    }
-  }
-  $self->$orig(@_);
-};
-
 # move connection arg to _connection, which is wrapped in a method
 # because infowindow has logic to choose which 
 # connection to return

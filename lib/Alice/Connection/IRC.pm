@@ -262,6 +262,8 @@ sub registered {
     $self->disconnected("ping timeout");
   });
   
+  $self->event('connect');
+
   # merge auto-joined channel list with existing channels
   my @channels = uniq @{$self->config->{channels}}, $self->channels;
   my @commands = ();

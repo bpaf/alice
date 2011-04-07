@@ -99,7 +99,10 @@ on self_join => sub {
   my ($self, $connection, $channel) = @_;
 
   if (my $window = $self->find_or_create_window($channel, $connection)) {
-    $window->disabled(0) if $window->disabled;
+    if ($window->disabled) {
+      $window->disabled(0);
+      $self->broadcast($window->connect_action);
+    }
     $self->broadcast($window->join_action);
   }
 };
@@ -132,7 +135,10 @@ on topic => sub {
   my ($self, $connection, $channel, $nick, $topic) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $window->disabled(0) if $window->disabled;
+    if ($window->disabled) {
+      $window->disabled(0);
+      $self->broadcast($window->connect_action);
+    }
     $topic = irc_to_html($topic, classes => 1, invert => "italic");
     $window->topic({string => $topic, author => $nick, time => time});
     $self->broadcast($window->format_event("topic", $nick, $topic));
@@ -141,7 +147,33 @@ on topic => sub {
 
 on disconnect => sub {
   my ($self, $connection, $reason) = @_;
-  $_->disabled(1) for $self->connection_windows($connection);
+
+  my @windows = $self->connection_windows($connection);
+
+  $_->disabled(1) for @windows;
+  my @events = map {$_->format_event("disconnect", $_->nick, $_->network)} @windows;
+
+  $self->broadcast(
+    @events,
+    {
+      type => "action",
+      event => "disconnect",
+      network => $connection->id,
+      windows => [map {$_->serialized} @windows ],
+    }
+  );
+};
+
+on 'connect' => sub {
+  my ($self, $connection, $reason) = @_;
+  $self->broadcast(
+    {
+      type => "action",
+      event => "connect",
+      network => $connection->id,
+      windows => [],
+    }
+  );
 };
 
 on awaymsg => sub {
@@ -156,7 +188,10 @@ on nicklist_update => sub {
   my ($self, $connection, $channel, @nicks) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $window->disabled(0) if $window->disabled;
+    if ($window->disabled) {
+      $window->disabled(0);
+      $self->broadcast($window->connect_action);
+    }
     $self->broadcast($window->nicks_action);
   }
 };
