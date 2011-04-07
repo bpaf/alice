@@ -60,13 +60,13 @@ my $commands = [
   },
   {
     name => 'names',
-    re => qr{^/n(?:ames)?(?:\s(-a(?:vatars)?))?$},
+    re => qr{^/n(?:ames)?$},
     in_channel => 1,
     eg => "/NAMES [-avatars]",
-    desc => "Lists nicks in current channel. Pass the -avatars option to display avatars with the nicks.",
+    desc => "Lists nicks in current channel.",
     code => sub  {
-      my ($self, $app, $window, $avatars) = @_;
-      $window->reply($window->nick_table($avatars));
+      my ($self, $app, $window) = @_;
+      $window->reply($window->nick_table);
     },
   },
   {

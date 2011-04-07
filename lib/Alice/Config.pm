@@ -2,24 +2,12 @@ package Alice::Config;
 
 use FindBin;
 use Data::Dumper;
-use File::ShareDir qw/dist_dir/;
 use Getopt::Long;
 use Any::Moose;
 use POSIX;
 
 use AnyEvent::AIO;
 use IO::AIO;
-
-has assetdir => (
-  is      => 'ro',
-  isa     => 'Str',
-  default => sub {
-    if (-e "$FindBin::Bin/../share/templates") {
-      return "$FindBin::Bin/../share";
-    }
-    return dist_dir('App-Alice');
-  }
-);
 
 has [qw/images avatars alerts/] => (
   is      => 'rw',
