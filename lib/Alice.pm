@@ -4,7 +4,7 @@ use AnyEvent;
 use Alice::Window;
 use Alice::InfoWindow;
 use Alice::HTTPD;
-use Alice::IRC;
+use Alice::Connection::IRC;
 use Alice::Config;
 use Alice::History;
 use Alice::Tabset;
@@ -28,18 +28,18 @@ has config => (
   isa      => 'Alice::Config',
 );
 
-has _ircs => (
+has _connections => (
   is      => 'rw',
   isa     => 'HashRef',
   default => sub {{}},
 );
 
-sub ircs {values %{$_[0]->_ircs}}
-sub add_irc {$_[0]->_ircs->{$_[1]->id} = $_[1]}
-sub has_irc {$_[0]->get_irc($_[1])}
-sub get_irc {$_[0]->_ircs->{$_[1]}}
-sub remove_irc {delete $_[0]->_ircs->{$_[1]->alias}}
-sub connected_ircs {grep {$_->is_connected} $_[0]->ircs}
+sub connections {values %{$_[0]->_connections}}
+sub add_connection {$_[0]->_connections->{$_[1]->id} = $_[1]}
+sub has_connection {$_[0]->get_connection($_[1])}
+sub get_connection {$_[0]->_connections->{$_[1]}}
+sub remove_connection {delete $_[0]->_connections->{$_[1]->id}}
+sub open_connections {grep {$_->is_connected} $_[0]->connections}
 
 has httpd => (
   is      => 'rw',
@@ -202,7 +202,7 @@ sub init {
   $self->template;
   $self->httpd;
 
-  $self->add_irc_server($_, $self->config->servers->{$_})
+  $self->add_new_connection($_, $self->config->servers->{$_})
     for keys %{$self->config->servers};
 }
 
@@ -211,7 +211,7 @@ sub init_shutdown {
 
   $self->history(undef);
   $self->alert("Alice server is shutting down");
-  $_->disconnect($msg) for $self->connected_ircs;
+  $_->disconnect($msg) for $self->open_connections;
 
   my ($w, $t);
   my $shutdown = sub {
@@ -221,7 +221,7 @@ sub init_shutdown {
     undef $t;
   };
 
-  $w = AE::idle sub {$shutdown->() unless $self->connected_ircs};
+  $w = AE::idle sub {$shutdown->() unless $self->open_connections};
   $t = AE::timer 3, 0, $shutdown;
 }
 
@@ -241,7 +241,7 @@ sub tab_order {
   for my $count (0 .. scalar @$window_ids - 1) {
     if (my $window = $self->get_window($window_ids->[$count])) {
       next unless $window->is_channel
-           and $self->config->servers->{$window->irc->id};
+           and $self->config->servers->{$window->network};
       push @$order, $window->title;
     }
   }
@@ -250,9 +250,9 @@ sub tab_order {
 }
 
 sub find_window {
-  my ($self, $title, $irc) = @_;
+  my ($self, $title, $connection) = @_;
   return $self->info_window if $title eq "info";
-  my $id = $self->_build_window_id($title, $irc->id);
+  my $id = $self->_build_window_id($title, $connection->id);
   if (my $window = $self->get_window($id)) {
     return $window;
   }
@@ -269,13 +269,13 @@ sub alert {
 }
 
 sub create_window {
-  my ($self, $title, $irc) = @_;
+  my ($self, $title, $connection) = @_;
   my $window = Alice::Window->new(
     title    => $title,
-    irc      => $irc,
+    connection => $connection,
     assetdir => $self->config->assetdir,
     app      => $self,
-    id       => $self->_build_window_id($title, $irc->id), 
+    id       => $self->_build_window_id($title, $connection->id), 
   );
   $self->add_window($window);
   return $window;
@@ -287,14 +287,14 @@ sub _build_window_id {
 }
 
 sub find_or_create_window {
-  my ($self, $title, $irc) = @_;
+  my ($self, $title, $connection) = @_;
   return $self->info_window if $title eq "info";
 
-  if (my $window = $self->find_window($title, $irc)) {
+  if (my $window = $self->find_window($title, $connection)) {
     return $window;
   }
 
-  $self->create_window($title, $irc);
+  $self->create_window($title, $connection);
 }
 
 sub sorted_windows {
@@ -318,12 +318,12 @@ sub close_window {
   $self->remove_window($window->id) if $window->type ne "info";
 }
 
-sub add_irc_server {
+sub add_new_connection {
   my ($self, $name, $config) = @_;
 
   $self->config->servers->{$name} = $config;
-  my $irc = Alice::IRC->new(config => $config);
-  $self->add_irc($irc);
+  my $conn = Alice::Connection::IRC->new(config => $config);
+  $self->add_connection($conn);
 }
 
 sub reload_config {
@@ -339,22 +339,22 @@ sub reload_config {
   
   for my $network (keys %{$self->config->servers}) {
     my $config = $self->config->servers->{$network};
-    if (!$self->has_irc($network)) {
-      $self->add_irc_server($network, $config);
+    if (!$self->has_connection($network)) {
+      $self->create_connection($network, $config);
     }
     else {
-      my $irc = $self->get_irc($network);
+      my $connection = $self->get_connection($network);
       $config->{ircname} ||= "";
       if ($config->{ircname} ne $prev{$network}) {
-        $irc->update_realname($config->{ircname});
+        $connection->update_realname($config->{ircname});
       }
-      $irc->config($config);
+      $connection->config($config);
     }
   }
-  for my $irc ($self->ircs) {
-    if (!$self->config->servers->{$irc->alias}) {
-      $self->remove_window($_->id) for $irc->windows;
-      $irc->remove;
+  for my $connection ($self->connections) {
+    if (!$self->config->servers->{$connection->id}) {
+      $self->remove_window($_->id) for $self->connection_windows($connection);
+      $connection->shutdown;
     }
   }
 }
@@ -511,7 +511,7 @@ sub authenticate {
 sub set_away {
   my ($self, $message) = @_;
   my @args = (defined $message ? (AWAY => $message) : "AWAY");
-  $_->send_srv(@args) for $self->connected_ircs;
+  $_->send_srv(@args) for $self->open_connections;
 }
 
 sub tabsets {
@@ -526,7 +526,7 @@ sub tabsets {
 
 sub network_windows {
   my ($self, $conn) = @_;
-  grep {$_->irc and $_->irc->alias eq $conn->alias} $self->windows;
+  grep {$_->network eq $conn->id} $self->windows;
 }
 
 sub nick_avatar {

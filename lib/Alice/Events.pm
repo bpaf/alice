@@ -8,14 +8,14 @@ use Digest::MD5 qw/md5_hex/;
 my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
 my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
 
-requires qw/add_irc/;
+requires qw/add_connection/;
 
 our %CALLBACKS;
 
-around add_irc => sub {
-  my ($orig, $self, $conn) = @_;
-  $conn->{reg_guard} = $conn->reg_cb($self->events);
-  $self->$orig($conn);
+around add_connection => sub {
+  my ($orig, $self, $connection) = @_;
+  $connection->{reg_guard} = $connection->reg_cb($self->events);
+  $self->$orig($connection);
 };
 
 sub events {
@@ -36,49 +36,49 @@ sub on ($&) {
 }
 
 on 'log' => sub {
-  my ($self, $conn, $level, $message, %options) = @_;
-  $options{network} = $conn->id;
+  my ($self, $connection, $level, $message, %options) = @_;
+  $options{network} = $connection->id;
   $self->log($level, $message, %options);
 };
 
 on privatemsg => sub {
-  my ($self, $conn, $nick, $text) = @_;
+  my ($self, $connection, $nick, $text) = @_;
 
   return if $self->is_ignore($nick);
 
-  if (my $window = $self->find_or_create_window($nick, $conn)) {
+  if (my $window = $self->find_or_create_window($nick, $connection)) {
     $self->broadcast($window->format_message($nick, $text)); 
   }
 };
 
 on publicmsg => sub {
-  my ($self, $conn, $channel, $nick, $text) = @_;
+  my ($self, $connection, $channel, $nick, $text) = @_;
 
   return if $self->is_ignore($nick);
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $self->broadcast($window->format_message($nick, $text)); 
   }
 };
 
 on ctcp_action => sub {
-  my ($self, $conn, $channel, $nick, $text) = @_;
+  my ($self, $connection, $channel, $nick, $text) = @_;
 
   return if $self->app->is_ignore($nick);
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $self->broadcast($window->format_message($nick, "\x{2022} $text"));
   }
 };
 
 on nick_change => sub {
-  my ($self, $conn, $old_nick, $new_nick, @channels) = @_;
+  my ($self, $connection, $old_nick, $new_nick, @channels) = @_;
 
   if ($self->avatars->{$old_nick}) {
-    $conn->avatars->{$new_nick} = delete $self->avatars->{$old_nick};
+    $connection->avatars->{$new_nick} = delete $self->avatars->{$old_nick};
   }
 
-  my @windows = map {$self->find_window($_, $conn)} @channels;
+  my @windows = map {$self->find_window($_, $connection)} @channels;
 
   $self->broadcast(
     map {$_->format_event("nick", $old_nick, $new_nick)} @windows
@@ -86,7 +86,7 @@ on nick_change => sub {
 };
 
 on invite => sub {
-  my ($self, $conn, $channel, $nick) = @_;
+  my ($self, $connection, $channel, $nick) = @_;
 
   $self->broadcast({
     type => "action",
@@ -96,42 +96,42 @@ on invite => sub {
 };
 
 on self_join => sub {
-  my ($self, $conn, $channel) = @_;
+  my ($self, $connection, $channel) = @_;
 
-  if (my $window = $self->find_or_create_window($channel, $conn)) {
+  if (my $window = $self->find_or_create_window($channel, $connection)) {
     $window->disabled(0) if $window->disabled;
     $self->broadcast($window->join_action);
   }
 };
 
 on 'join' => sub {
-  my ($self, $conn, $nick, $channel) = @_;
+  my ($self, $connection, $nick, $channel) = @_;
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $self->broadcast($window->format_event("joined", $nick));
   }
 };
 
 on self_part => sub {
-  my ($self, $conn, $channel) = @_;
+  my ($self, $connection, $channel) = @_;
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $self->close_window($window);
   }
 };
 
 on part => sub {
-  my ($self, $conn, $channel, $reason,  @nicks) = @_;
+  my ($self, $connection, $channel, $reason,  @nicks) = @_;
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $self->broadcast(map {$window->format_event("left", $_, $reason)} @nicks);
   }
 };
 
 on topic => sub {
-  my ($self, $conn, $channel, $nick, $topic) = @_;
+  my ($self, $connection, $channel, $nick, $topic) = @_;
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $window->disabled(0) if $window->disabled;
     $topic = irc_to_html($topic, classes => 1, invert => "italic");
     $window->topic({string => $topic, author => $nick, time => time});
@@ -140,37 +140,37 @@ on topic => sub {
 };
 
 on disconnect => sub {
-  my ($self, $conn, $reason) = @_;
-  $_->disabled(1) for $self->network_windows($conn);
+  my ($self, $connection, $reason) = @_;
+  $_->disabled(1) for $self->network_windows($connection);
 };
 
 on awaymsg => sub {
-  my ($self, $conn, $nick, $awaymsg) = @_;
+  my ($self, $connection, $nick, $awaymsg) = @_;
 
-  if (my $window = $self->find_window($nick, $conn)) {
+  if (my $window = $self->find_window($nick, $connection)) {
     $window->reply("$nick is away ($awaymsg)");
   }
 };
 
 on nicklist_update => sub {
-  my ($self, $conn, $channel, @nicks) = @_;
+  my ($self, $connection, $channel, @nicks) = @_;
 
-  if (my $window = $self->find_window($channel, $conn)) {
+  if (my $window = $self->find_window($channel, $connection)) {
     $window->disabled(0) if $window->disabled;
     $self->broadcast($window->nicks_action);
   }
 };
 
 on not_nick => sub {
-  my ($self, $conn, $nick) = @_;
+  my ($self, $connection, $nick) = @_;
 
-  if (my $window = $self->find_window($nick, $conn)) {
+  if (my $window = $self->find_window($nick, $connection)) {
     $self->broadcast($window->format_announcement("No such nick."));
   }
 };
 
 on whois => sub {
-  my ($self, $conn, $nick, $info) = @_;
+  my ($self, $connection, $nick, $info) = @_;
 
   $self->broadcast({
     type => "action",
@@ -180,14 +180,14 @@ on whois => sub {
 };
 
 on realname_change => sub {
-  my ($self, $conn, $nick, $realname) = @_;
+  my ($self, $connection, $nick, $realname) = @_;
   $self->avatars->{$nick} = realname_avatar($realname);
 };
 
-on remove => sub {
-  my ($self, $conn) = shift;
-  delete $conn->{reg_guard};
-  $self->remove_irc($conn);
+on shutdown => sub {
+  my ($self, $connection) = shift;
+  delete $connection->{reg_guard};
+  $self->remove_connection($connection);
 };
 
 sub realname_avatar {

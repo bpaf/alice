@@ -9,7 +9,7 @@ extends 'Alice::Window';
 
 has '+title' => (required => 0, default => 'info');
 has 'topic' => (is => 'ro', isa => 'HashRef', default => sub {{string => ''}});
-has '+_irc' => (required => 0, isa => 'Any');
+has '+_connection' => (required => 0, isa => 'Any');
 has '+type' => (is => 'ro', default => "info");
 
 #
@@ -21,9 +21,9 @@ sub is_channel {0}
 sub network {""}
 sub all_nicks {[]}
 
-sub irc {
+sub connection {
   my $self = shift;
-  return ($self->app->connected_ircs)[0] if $self->app->connected_ircs == 1;
+  return ($self->app->open_connections)[0] if $self->app->open_connections == 1;
   return undef;
 }
 

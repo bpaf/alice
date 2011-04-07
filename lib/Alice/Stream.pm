@@ -1,5 +1,7 @@
 package Alice::Stream;
 
+use Alice::Stream::WebSocket;
+use Alice::Stream::XHR;
 use Any::Moose;
 
 has closed => (

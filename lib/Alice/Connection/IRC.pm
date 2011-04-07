@@ -1,4 +1,4 @@
-package Alice::IRC;
+package Alice::Connection::IRC;
 
 use AnyEvent;
 use AnyEvent::IRC::Client;
@@ -306,7 +306,7 @@ sub disconnected {
   $self->reconnect(0) unless $self->disabled;
   
   if ($self->removed) {
-    $self->event("remove");
+    $self->event("shutdown");
   }
 }
 
@@ -327,7 +327,7 @@ sub disconnect {
   );
 }
 
-sub remove {
+sub shutdown {
   my $self = shift;
   $self->removed(1);
   $self->disconnect;
