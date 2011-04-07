@@ -3,6 +3,7 @@ package Alice;
 use AnyEvent;
 use Alice::Window;
 use Alice::InfoWindow;
+use Alice::MessageBuffer;
 use Alice::HTTPD;
 use Alice::Connection::IRC;
 use Alice::Config;
@@ -143,10 +144,10 @@ has 'info_window' => (
   lazy => 1,
   default => sub {
     my $self = shift;
+    my $id = $self->_build_window_id("info", "info");
     my $info = Alice::InfoWindow->new(
-      id       => $self->_build_window_id("info", "info"),
-      assetdir => $self->config->assetdir,
-      app      => $self,
+      id       => $id,
+      buffer   => $self->new_window_buffer($id),
     );
     $self->add_window($info);
     return $info;
@@ -230,6 +231,14 @@ sub shutdown {
   $_->close for @{$self->streams};
 }
 
+sub new_window_buffer {
+  my ($self, $id) = @_;
+  Alice::MessageBuffer->new(
+    id => $id,
+    store_class => $self->config->message_store
+  );
+}
+
 sub reload_commands {
   my $self = shift;
   $self->commands->reload_handlers;
@@ -270,12 +279,12 @@ sub alert {
 
 sub create_window {
   my ($self, $title, $connection) = @_;
+  my $id = $self->_build_window_id($title, $connection->id);
   my $window = Alice::Window->new(
     title    => $title,
-    connection => $connection,
-    assetdir => $self->config->assetdir,
-    app      => $self,
-    id       => $self->_build_window_id($title, $connection->id), 
+    network  => $connection->id,
+    id       => $id,
+    buffer   => $self->new_window_buffer($id),
   );
   $self->add_window($window);
   return $window;
