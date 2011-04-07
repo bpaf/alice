@@ -43,9 +43,8 @@ has id => (
   required => 1,
 );
 
-has _irc => (
+has _connection => (
   is       => 'ro',
-  isa      => 'Alice::IRC',
   required => 1,
   weak_ref => 1,
 );
@@ -65,7 +64,7 @@ has app => (
 
 sub network {
   my $self = shift;
-  return $self->irc->id;
+  return $self->connection->id;
 }
 
 around disabled => sub {
@@ -89,14 +88,14 @@ around disabled => sub {
   $self->$orig(@_);
 };
 
-# move irc arg to _irc, which is wrapped in a method
-# because infowindow has logic to choose which irc
+# move connection arg to _connection, which is wrapped in a method
+# because infowindow has logic to choose which 
 # connection to return
 sub BUILDARGS {
   my $class = shift;
   my $args = ref $_[0] ? $_[0] : {@_};
-  $args->{_irc} = $args->{irc};
-  delete $args->{irc};
+  $args->{_connection} = $args->{connection};
+  delete $args->{connection};
   return $args;
 }
 
@@ -118,12 +117,12 @@ has type => (
   is => 'ro',
   lazy => 1,
   default => sub {
-    $_[0]->irc->is_channel($_[0]->title) ? "channel" : "privmsg";
+    $_[0]->connection->is_channel($_[0]->title) ? "channel" : "privmsg";
   },
 );
 
 sub is_channel {$_[0]->type eq "channel"}
-sub irc {$_[0]->_irc}
+sub connection {$_[0]->_connection}
 
 sub topic_string {
   my $self = shift;
@@ -150,14 +149,14 @@ sub render {shift->app->render(@_)}
 
 sub nick {
   my $self = shift;
-  return $self->irc->nick;
+  return $self->connection->nick;
 }
 
 sub all_nicks {
   my ($self, $modes) = @_;
 
   return $self->is_channel ?
-         [ $self->irc->channel_nicks($self->title, $modes) ]
+         [ $self->connection->channel_nicks($self->title, $modes) ]
        : [ $self->title, $self->nick ];
 }
 

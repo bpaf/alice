@@ -22,7 +22,7 @@
 
             alice.ready();
 
-            <? if (!$app->connected_ircs) { ?>
+            <? if (!$app->open_connections) { ?>
             alice.toggleConfig();
             <? } ?>
             <? if ($app->config->first_run) { ?>

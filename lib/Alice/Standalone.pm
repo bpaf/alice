@@ -26,7 +26,7 @@ after init => sub {
 
 before init_shutdown => sub {
   my $self = shift;
-  print STDERR ($self->connected_ircs ? "\nDisconnecting, please wait\n" : "\n");
+  print STDERR ($self->open_connections ? "\nDisconnecting, please wait\n" : "\n");
 };
 
 after shutdown => sub {

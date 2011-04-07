@@ -4,15 +4,15 @@ use AnyEvent;
 use AnyEvent::HTTP;
 
 use Twiggy::Server;
-use Plack::Request;
 use Plack::Builder;
 use Plack::Middleware::Static;
 use Plack::Session::Store::File;
 use Plack::Session::State::Cookie;
-use Alice::Request;
-use Alice::Stream::XHR;
-use Alice::Stream::WebSocket;
+
+use Alice::HTTP::Request;
+use Alice::Stream;
 use Alice::Commands;
+
 use JSON;
 use Encode;
 use Any::Moose;
@@ -101,7 +101,7 @@ sub _build_httpd {
 sub dispatch {
   my ($self, $env, $cb) = @_;
 
-  my $req = Alice::Request->new($env, $cb);
+  my $req = Alice::HTTP::Request->new($env, $cb);
   my $res = $req->new_response(200);
 
   if ($self->auth_enabled) {
