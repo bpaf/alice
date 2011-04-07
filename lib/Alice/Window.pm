@@ -98,8 +98,6 @@ sub serialized {
   };
 }
 
-sub render {shift->app->render(@_)}
-
 sub all_nicks {
   my ($self, $modes) = @_;
 
@@ -243,10 +241,7 @@ sub close_action {
 }
 
 sub nick_table {
-  my ($self, $avatars) = @_;
-  if ($avatars) {
-    return encoded_string($self->render("avatargrid", $self));
-  }
+  my $self = shift;
   return _format_nick_table($self->all_nicks(1));
 }
 
@@ -289,6 +284,11 @@ sub hashtag {
   my $path = $self->type eq "privmsg" ? "users" : "channels";
   
   return "/" . $self->network . "/$path/" . $name;
+}
+
+sub render {
+  my ($self, $template, @data) = @_;
+  $Alice::TEMPLATE->render_file("$template.html", $self, @data)->as_string;
 }
 
 __PACKAGE__->meta->make_immutable;

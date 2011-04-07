@@ -18,9 +18,17 @@ use List::Util qw/first/;
 use List::MoreUtils qw/any none/;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use IRC::Formatting::HTML qw/html_to_irc/;
+use File::ShareDir qw/dist_dir/;
 use Encode;
 
 our $VERSION = '0.19';
+
+our $ASSETDIR = "share";
+our $TEMPLATE = Text::MicroTemplate::File->new(
+  include_path => "$ASSETDIR/templates",
+  cache        => 2,
+);
+
 
 with 'Alice::Events';
 
@@ -66,7 +74,7 @@ has commands => (
   isa     => 'Alice::Commands',
   lazy    => 1,
   default => sub {
-    Alice::Commands->new(commands_file => $_[0]->config->assetdir."/commands.pl");
+    Alice::Commands->new(commands_file => "$ASSETDIR/commands.pl");
   }
 );
 
@@ -76,7 +84,7 @@ has history => (
   default => sub {
     my $self = shift;
     my $config = $self->config->path."/log.db";
-    copy($self->config->assetdir."/log.db", $config) unless -e $config;
+    copy("$ASSETDIR/log.db", $config) unless -e $config;
     Alice::History->new(dbfile => $config);
   },
 );
@@ -131,10 +139,6 @@ has 'template' => (
   lazy => 1,
   default => sub {
     my $self = shift;
-    Text::MicroTemplate::File->new(
-      include_path => $self->config->assetdir . '/templates',
-      cache        => 2,
-    );
   },
 );
 
@@ -450,7 +454,7 @@ sub purge_disconnects {
 
 sub render {
   my ($self, $template, @data) = @_;
-  $self->template->render_file("$template.html", $self, @data)->as_string;
+  $TEMPLATE->render_file("$template.html", $self, @data)->as_string;
 }
 
 sub is_highlight {
