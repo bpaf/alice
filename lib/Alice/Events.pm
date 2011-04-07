@@ -170,6 +170,12 @@ on not_nick => sub {
 
 on whois => sub {
   my ($self, $conn, $nick, $info) = @_;
+
+  $self->broadcast({
+    type => "action",
+    event => "announce",
+    body => join "\n", map {"$_: $info->{$_}"} keys %$info,
+  });
 };
 
 on realname_change => sub {
