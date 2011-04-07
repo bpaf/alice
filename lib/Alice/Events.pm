@@ -3,6 +3,7 @@ package Alice::Events;
 use Any::Moose 'Role';
 use IRC::Formatting::HTML qw/irc_to_html/;
 use Scalar::Util qw/weaken/;
+use Digest::MD5 qw/md5_hex/;
 
 my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
 my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
