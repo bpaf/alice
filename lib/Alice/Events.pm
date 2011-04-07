@@ -138,8 +138,8 @@ on topic => sub {
 };
 
 on disconnect => sub {
-  my ($self, $conn, $reason, @channels) = @_;
-  $_->disabled(1) for map {$self->find_window($_, $conn)} @channels;
+  my ($self, $conn, $reason) = @_;
+  $_->disabled(1) for $self->network_windows($conn);
 };
 
 on awaymsg => sub {
