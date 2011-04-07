@@ -242,7 +242,7 @@ sub format_message {
     type      => "message",
     event     => "say",
     nick      => $nick,
-    avatar    => $self->irc->nick_avatar($nick),
+    avatar    => $self->app->nick_avatar($nick),
     window    => $self->serialized,
     html      => encoded_string($html),
     self      => $own_nick eq $nick,

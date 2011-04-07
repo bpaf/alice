@@ -1,7 +1,6 @@
 package Alice;
 
 use AnyEvent;
-use Text::MicroTemplate::File;
 use Alice::Window;
 use Alice::InfoWindow;
 use Alice::HTTPD;
@@ -10,18 +9,24 @@ use Alice::Config;
 use Alice::Logger;
 use Alice::History;
 use Alice::Tabset;
+
 use Any::Moose;
+
 use File::Copy;
+use Text::MicroTemplate::File;
 use Digest::MD5 qw/md5_hex/;
 use List::Util qw/first/;
 use List::MoreUtils qw/any none/;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use IRC::Formatting::HTML qw/html_to_irc/;
-use Try::Tiny;
-use JSON;
 use Encode;
 
 our $VERSION = '0.19';
+
+my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
+my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
+
+with 'Alice::Events';
 
 has config => (
   is       => 'rw',
@@ -30,16 +35,15 @@ has config => (
 
 has _ircs => (
   is      => 'rw',
-  isa     => 'ArrayRef',
-  default => sub {[]},
+  isa     => 'HashRef',
+  default => sub {{}},
 );
 
-sub ircs {@{$_[0]->_ircs}}
-sub add_irc {push @{$_[0]->_ircs}, $_[1]}
+sub ircs {values %{$_[0]->_ircs}}
+sub add_irc {$_[0]->_ircs->{$_[1]->alias} = $_[1]}
 sub has_irc {$_[0]->get_irc($_[1])}
-sub get_irc {first {$_->alias eq $_[1]} $_[0]->ircs}
-sub remove_irc {$_[0]->_ircs([ grep { $_->alias ne $_[1] } $_[0]->ircs])}
-sub irc_aliases {map {$_->alias} $_[0]->ircs}
+sub get_irc {$_[0]->_ircs->{$_[1]}}
+sub remove_irc {delete $_[0]->_ircs->{$_[1]}}
 sub connected_ircs {grep {$_->is_connected} $_[0]->ircs}
 
 has httpd => (
@@ -79,6 +83,12 @@ has history => (
     copy($self->config->assetdir."/log.db", $config) unless -e $config;
     Alice::History->new(dbfile => $config);
   },
+);
+
+has avatars => (
+  is => 'rw',
+  isa => 'HashRef',
+  default => sub{{}},
 );
 
 sub store {
@@ -213,7 +223,7 @@ sub init_shutdown {
 sub shutdown {
   my $self = shift;
 
-  $self->_ircs([]);
+  $self->_ircs({});
   $_->close for @{$self->streams};
   $self->streams([]);
 }
@@ -238,9 +248,9 @@ sub tab_order {
 }
 
 sub find_window {
-  my ($self, $title, $connection) = @_;
+  my ($self, $title, $irc) = @_;
   return $self->info_window if $title eq "info";
-  my $id = $self->_build_window_id($title, $connection->alias);
+  my $id = $self->_build_window_id($title, $irc->alias);
   if (my $window = $self->get_window($id)) {
     return $window;
   }
@@ -257,16 +267,21 @@ sub alert {
 }
 
 sub create_window {
-  my ($self, $title, $connection) = @_;
+  my ($self, $title, $irc) = @_;
   my $window = Alice::Window->new(
     title    => $title,
-    irc      => $connection,
+    irc      => $irc,
     assetdir => $self->config->assetdir,
     app      => $self,
-    id       => $self->_build_window_id($title, $connection->alias), 
+    id       => $self->_build_window_id($title, $irc->alias), 
   );
   $self->add_window($window);
   return $window;
+}
+
+sub nick_avatar {
+  my ($self, $nick) = @_;
+  return $self->avatars->{$nick};
 }
 
 sub _build_window_id {
@@ -275,14 +290,14 @@ sub _build_window_id {
 }
 
 sub find_or_create_window {
-  my ($self, $title, $connection) = @_;
+  my ($self, $title, $irc) = @_;
   return $self->info_window if $title eq "info";
 
-  if (my $window = $self->find_window($title, $connection)) {
+  if (my $window = $self->find_window($title, $irc)) {
     return $window;
   }
 
-  $self->create_window($title, $connection);
+  $self->create_window($title, $irc);
 }
 
 sub sorted_windows {
@@ -308,11 +323,9 @@ sub close_window {
 
 sub add_irc_server {
   my ($self, $name, $config) = @_;
+
   $self->config->servers->{$name} = $config;
-  my $irc = Alice::IRC->new(
-    app    => $self,
-    alias  => $name
-  );
+  my $irc = Alice::IRC->new(config => $config);
   $self->add_irc($irc);
 }
 
@@ -514,104 +527,20 @@ sub tabsets {
   } sort keys %{$self->config->tabsets};
 }
 
+sub realname_avatar {
+  my $realname = shift;
+
+  if ($realname =~ $email_re) {
+    my $email = $1;
+    return "http://www.gravatar.com/avatar/"
+           . md5_hex($email) . "?s=32&amp;r=x";
+  }
+  elsif ($realname =~ $image_re) {
+    return $1;
+  }
+
+  return ();
+}
+
 __PACKAGE__->meta->make_immutable;
 1;
-
-=pod
-
-=head1 NAME
-
-Alice - an Altogether Lovely Internet Chatting Experience
-
-=head1 SYNPOSIS
-
-    my $app = Alice->new;
-    $app->run;
-
-=head1 DESCRIPTION
-
-This is an overview of the Alice class. If you are curious
-about running and/or using alice please read the L<Alice::Readme>.
-
-=head2 CONSTRUCTOR
-
-=over 4
-
-=item Alice->new(%options)
-
-Alice's contructor takes these options:
-
-=item user => $username
-
-This can be a unique name for this Alice instance, if none is
-provided it will simply use $ENV{USER}.
-
-=back
-
-=head2 METHODS
-
-=over 4
-
-=item run
-
-This will start the Alice. It will start up the HTTP server and
-begin connecting to IRC servers that are set to autoconnect.
-
-=item handle_command ($command_string, $window)
-
-Take a string and matches it to the correct action as defined by
-L<Alice::Command>. A source L<Alice::Window> must also
-be provided.
-
-=item find_window ($title, $connection)
-
-Takes a window title and Alice::IRC object. It will attempt
-to find a matching window and return undef if none is found.
-
-=item alert ($alertstring)
-
-Send a message to all connected clients. It will show up as a red
-line in their currently focused window.
-
-=item create_window ($title, $connection)
-
-This will create a new L<Alice::Window> object associated
-with the provided L<Alice::IRC> object.
-
-=item find_or_create_window ($title, $connection)
-
-This will attempt to find an existing window with the provided
-title and connection. If no window is found it will create
-a new one.
-
-=item windows
-
-Returns a list of all the L<Alice::Window>s.
-
-=item sorted_windows
-
-Returns a list of L<Alice::Windows> sorted in the order
-defined by the user's config.
-
-=item close_window ($window)
-
-Takes an L<Alice::Window> object to be closed. It will
-part if it is a channel and send the required messages to the
-client to close the tab.
-
-=item ircs
-
-Returns a list of all the L<Alice::IRC>s.
-
-=item connected_ircs
-
-Returns a list of all the connected L<Alice::IRC>s.
-
-=item config
-
-Returns this instance's L<Alice::Config> object.
-
-=back
-
-=cut
-
