@@ -134,14 +134,15 @@ command qr{names|n} => {
 };
 
 command qr{join|j} => {
-  opts => qr{(\S+)\s+(\S+)?},
+  opts => qr{(\S+)\s*(\S+)?},
+  connection => 1,
   eg => "/JOIN [-<server name>] <channel> [<password>]",
   desc => "Joins the specified channel.",
   cb => sub  {
     my ($self, $req) = @_;
 
-    $req->connection->log(info => "joining ".$req->{opts}[0]);
-    $req->connection->send_srv(JOIN => @{$req->{opts}});
+    $self->log(info => "joining ".$req->{opts}[0]);
+    $req->{connection}->send_srv(JOIN => @{$req->{opts}});
   },
 };
 
@@ -165,12 +166,12 @@ command qr{close|wc|part} => {
   cb => sub  {
     my ($self, $req) = @_;
 
-    my $window = $req->window;
+    my $window = $req->{window};
     $self->close_window($window);
 
     if ($window->is_channel) {
       my $connection = $self->get_connection($window->network);
-      $connection->send_srv(PART => $window->title);
+      $connection->send_srv(PART => $window->title) if $connection->is_connected;
     }
   },
 };
