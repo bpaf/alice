@@ -7,7 +7,6 @@ use Alice::MessageBuffer;
 use Alice::HTTPD;
 use Alice::Connection::IRC;
 use Alice::Config;
-use Alice::History;
 use Alice::Tabset;
 
 use Any::Moose;
@@ -25,16 +24,13 @@ with 'Alice::Role::Template';
 with 'Alice::Role::Events';
 with 'Alice::Role::HTTPRoutes';
 with 'Alice::Role::IRCCommands';
+with 'Alice::Role::History';
 
 our $VERSION = '0.19';
 
 our $ASSETDIR = do {
-  if (-e  "$FindBin::Bin/../share/static") {
-    "$FindBin::Bin/../share/";
-  }
-  else {
-    dist_dir('App-Alice');
-  }
+  my $bin = $FindBin::Bin;
+  -e "$bin/../share/static" ? "$bin/../share" : dist_dir('App-Alice');
 };
 
 has config => (
@@ -79,30 +75,6 @@ has streams => (
 sub add_stream {unshift @{shift->streams}, @_}
 sub no_streams {@{$_[0]->streams} == 0}
 sub stream_count {scalar @{$_[0]->streams}}
-
-has history => (
-  is      => 'rw',
-  lazy    => 1,
-  default => sub {
-    my $self = shift;
-    my $config = $self->config->path."/log.db";
-    copy("$ASSETDIR/log.db", $config) unless -e $config;
-    Alice::History->new(dbfile => $config);
-  },
-);
-
-sub store {
-  my ($self, @args) = @_;
-  return unless $self->config->logging;
-  my $idle_w; $idle_w = AE::idle sub {
-    $self->history->store(
-      @args,
-      user => $self->user,
-      time => time,
-    );
-    undef $idle_w;
-  };
-}
 
 sub log {
   my ($self, $level, $message, %options) = @_;
@@ -161,7 +133,7 @@ sub BUILDARGS {
 
   my $self = {};
 
-  for (qw/history template user httpd/) {
+  for (qw/template user httpd/) {
     if (exists $options{$_}) {
       $self->{$_} = $options{$_};
       delete $options{$_};
@@ -189,7 +161,6 @@ sub run {
 
 sub init {
   my $self = shift;
-  $self->history if $self->config->logging;
   $self->info_window;
   $self->httpd;
 
@@ -200,7 +171,6 @@ sub init {
 sub init_shutdown {
   my ($self, $cb, $msg) = @_;
 
-  $self->history(undef);
   $self->alert("Alice server is shutting down");
   $_->disconnect($msg) for $self->open_connections;
 
@@ -541,6 +511,8 @@ sub connection_windows {
   my ($self, $conn) = @_;
   grep {$_->network eq $conn->id} $self->windows;
 }
+
+sub assetdir {$ASSETDIR}
 
 __PACKAGE__->meta->make_immutable;
 1;
