@@ -4,15 +4,13 @@ use AnyEvent;
 use Alice::Window;
 use Alice::InfoWindow;
 use Alice::MessageBuffer;
-use Alice::HTTPD;
 use Alice::Connection::IRC;
 use Alice::Config;
 use Alice::Tabset;
 
 use Any::Moose;
 
-use List::Util qw/first/;
-use List::MoreUtils qw/any none/;
+use List::MoreUtils qw/any/;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use IRC::Formatting::HTML qw/html_to_irc/;
 use File::ShareDir qw/dist_dir/;
@@ -49,21 +47,6 @@ sub has_connection {$_[0]->get_connection($_[1])}
 sub get_connection {$_[0]->_connections->{$_[1]}}
 sub remove_connection {delete $_[0]->_connections->{$_[1]->id}}
 sub open_connections {grep {$_->is_connected} $_[0]->connections}
-
-has httpd => (
-  is      => 'rw',
-  isa     => 'Alice::HTTPD',
-  lazy    => 1,
-  default => sub {
-    my $self = shift;
-    Alice::HTTPD->new(
-      address => $self->config->http_address,
-      port => $self->config->http_port,
-      assetdir => $self->assetdir,
-      sessiondir => $self->config->path."/sessions",
-    );
-  },
-);
 
 has streams => (
   is      => 'rw',
@@ -109,7 +92,6 @@ sub window_ids {keys %{$_[0]->_windows}}
 has 'info_window' => (
   is => 'ro',
   isa => 'Alice::InfoWindow',
-  lazy => 1,
   default => sub {
     my $self = shift;
     my $id = $self->_build_window_id("info", "info");
@@ -117,7 +99,6 @@ has 'info_window' => (
       id       => $id,
       buffer   => $self->new_window_buffer($id),
     );
-    $self->add_window($info);
     return $info;
   }
 );
@@ -132,7 +113,7 @@ sub BUILDARGS {
 
   my $self = {};
 
-  for (qw/template user httpd/) {
+  for (qw/user/) {
     if (exists $options{$_}) {
       $self->{$_} = $options{$_};
       delete $options{$_};
@@ -160,8 +141,7 @@ sub run {
 
 sub init {
   my $self = shift;
-  $self->info_window;
-  $self->httpd;
+  $self->add_window($self->info_window);
 
   $self->add_new_connection($_, $self->config->servers->{$_})
     for keys %{$self->config->servers};

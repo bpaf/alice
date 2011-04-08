@@ -25,11 +25,10 @@ has store => (
   lazy => 1, 
   default => sub {
     my $self = shift;
+
     my $class = "Alice::MessageStore::".$self->store_class;
-    my $id = $self->id;
-    my $store = $class->new(id => $id);
-    die $@ if $@;
-    return $store;
+    eval "use $class;";
+    $class->new(id => $self->id);
   }
 );
 

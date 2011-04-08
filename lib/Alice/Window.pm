@@ -3,7 +3,6 @@ package Alice::Window;
 use Any::Moose;
 use AnyEvent;
 
-use Alice::MessageBuffer;
 use Text::MicroTemplate qw/encoded_string/;
 use IRC::Formatting::HTML qw/irc_to_html/;
 use Encode;
@@ -14,7 +13,6 @@ my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\
 
 has buffer => (
   is      => 'rw',
-  isa     => 'Alice::MessageBuffer',
   required => 1,
 );
 
