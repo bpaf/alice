@@ -11,7 +11,6 @@ use Alice::Tabset;
 
 use Any::Moose;
 
-use File::Copy;
 use List::Util qw/first/;
 use List::MoreUtils qw/any none/;
 use AnyEvent::IRC::Util qw/filter_colors/;
@@ -60,7 +59,7 @@ has httpd => (
     Alice::HTTPD->new(
       address => $self->config->http_address,
       port => $self->config->http_port,
-      assetdir => $ASSETDIR,
+      assetdir => $self->assetdir,
       sessiondir => $self->config->path."/sessions",
     );
   },
