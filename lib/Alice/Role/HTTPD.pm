@@ -11,7 +11,6 @@ use Plack::Session::State::Cookie;
 use Alice::HTTP::Request;
 use Alice::Stream;
 
-use JSON;
 use Encode;
 use Any::Moose 'Role';
 

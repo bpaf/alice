@@ -92,6 +92,7 @@ sub window_ids {keys %{$_[0]->_windows}}
 has 'info_window' => (
   is => 'ro',
   isa => 'Alice::InfoWindow',
+  lazy => 1,
   default => sub {
     my $self = shift;
     my $id = $self->_build_window_id("info", "info");

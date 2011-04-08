@@ -5,6 +5,7 @@ use Any::Moose 'Role';
 use Text::MicroTemplate::File;
 use File::ShareDir qw/dist_dir/;
 use Exporter;
+use FindBin;
 
 our @EXPORT = qw/render/;
 our @EXPORT_OK = qw/render/;

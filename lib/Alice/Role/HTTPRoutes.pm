@@ -1,6 +1,7 @@
 package Alice::Role::HTTPRoutes;
 
 use Any::Moose 'Role';
+use JSON;
 use Encode;
 
 requires 'render';
