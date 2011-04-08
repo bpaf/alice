@@ -13,8 +13,7 @@ sub http_request {
   for my $route (@ROUTES) {
     my $path = $route->[0];
     if ($req->path_info =~ /^\/$path\/?$/) {
-      my $method = $route->[1];
-      $self->$method($req, $res);
+      $route->[1]->($self, $req, $res);
       return;
     }
   }
