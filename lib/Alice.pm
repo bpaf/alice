@@ -385,12 +385,7 @@ sub handle_message {
     $message->{msg} = html_to_irc($message->{msg}) if $message->{html};
 
     for (split /\n/, $message->{msg}) {
-      eval {
-        $self->irc_command($window, $_) if length $_;
-      };
-      if ($@) {
-        warn $@;
-      }
+      $self->irc_command($window, $_) if length $_;
     }
   }
 }

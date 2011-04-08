@@ -3,6 +3,7 @@ package Alice::Role::HTTPRoutes;
 use Any::Moose 'Role';
 use JSON;
 use Encode;
+use Try::Tiny;
 
 requires 'render';
 
@@ -14,7 +15,12 @@ sub http_request {
   for my $route (@ROUTES) {
     my $path = $route->[0];
     if ($req->path_info =~ /^\/$path\/?$/) {
-      $route->[1]->($self, $req, $res);
+      try {
+        $route->[1]->($self, $req, $res);
+      }
+      catch {
+        $res->send([500, ["Content-Type", "text/plain"], ["something went wrong"]]);
+      };
       return;
     }
   }
@@ -267,11 +273,13 @@ route qr/.*/ => sub {
   my $path = $req->path;
   $path =~ s/^\///;
 
-  eval {
+  try {
     $res->body($self->render($path));
+    $res->send;
+  }
+  catch {
+    $res->notfound;
   };
-
-  $@ ? $res->notfound : $res->send;
 };
 
 route export => sub {

@@ -12,6 +12,7 @@ use Alice::HTTP::Request;
 use Alice::Stream;
 
 use Encode;
+use Try::Tiny;
 use Any::Moose 'Role';
 
 has httpd => (
@@ -25,7 +26,7 @@ sub _build_httpd {
   my $httpd;
 
   # eval in case server can't bind port
-  eval {
+  try {
     $httpd = Twiggy::Server->new(
       host => $self->config->http_address,
       port => $self->config->http_port,
@@ -44,15 +45,17 @@ sub _build_httpd {
         sub {
           my $env = shift;
           return sub {
-            eval { $self->dispatch($env, shift) };
-            warn $@ if $@;
+            $self->dispatch($env, shift);
           }
         }
       }
     );
+  }
+  catch {
+    warn "Error: could not start http server\n";
+    $self->shutdown;
   };
 
-  warn $@ if $@;
   return $httpd;
 }
 

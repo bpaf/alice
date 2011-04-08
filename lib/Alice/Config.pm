@@ -153,9 +153,6 @@ sub load {
     $self->merge($config);
     $self->callback->();
 
-    my $class = "Alice::MessageStore::".$self->message_store;
-    eval "require $class";
-
     delete $self->{callback};
     $self->{loaded} = 1;
   };
