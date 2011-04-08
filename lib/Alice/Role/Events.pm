@@ -47,7 +47,7 @@ on privatemsg => sub {
   return if $self->is_ignore($nick);
 
   if (my $window = $self->find_or_create_window($nick, $connection)) {
-    $self->broadcast($window->format_message($nick, $text)); 
+    $self->send_message($window, $nick, $text); 
   }
 };
 
@@ -57,7 +57,7 @@ on publicmsg => sub {
   return if $self->is_ignore($nick);
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $self->broadcast($window->format_message($nick, $text)); 
+    $self->send_message($window, $nick, $text); 
   }
 };
 
@@ -67,15 +67,20 @@ on ctcp_action => sub {
   return if $self->app->is_ignore($nick);
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $self->broadcast($window->format_message($nick, "\x{2022} $text"));
+    $self->send_message($window, $nick, "\x{2022} $text");
   }
+};
+
+on self_nick_change => sub {
+  my ($self, $connection, $new_nick) = @_;
+  $connection->nick($new_nick);
 };
 
 on nick_change => sub {
   my ($self, $connection, $old_nick, $new_nick, @channels) = @_;
 
-  if ($self->avatars->{$old_nick}) {
-    $connection->avatars->{$new_nick} = delete $self->avatars->{$old_nick};
+  if ($connection->avatars->{$old_nick}) {
+    $connection->avatars->{$new_nick} = delete $connection->avatars->{$old_nick};
   }
 
   my @windows = map {$self->find_window($_, $connection)} @channels;
@@ -111,7 +116,7 @@ on 'join' => sub {
   my ($self, $connection, $nick, $channel) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $self->broadcast($window->format_event("joined", $nick));
+    $self->send_event($window, "joined", $nick);
   }
 };
 
@@ -141,7 +146,7 @@ on topic => sub {
     }
     $topic = irc_to_html($topic, classes => 1, invert => "italic");
     $window->topic({string => $topic, author => $nick, time => time});
-    $self->broadcast($window->format_event("topic", $nick, $topic));
+    $self->send_event($window, "topic", $nick, $topic);
   }
 };
 
@@ -188,7 +193,7 @@ on nicklist_update => sub {
   my ($self, $connection, $channel, @nicks) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $window->nicks(@nicks);
+    $window->nicks(\@nicks);
     if ($window->disabled) {
       $window->disabled(0);
       $self->broadcast($window->connect_action);
@@ -201,7 +206,7 @@ on not_nick => sub {
   my ($self, $connection, $nick) = @_;
 
   if (my $window = $self->find_window($nick, $connection)) {
-    $self->broadcast($window->format_announcement("No such nick."));
+    $self->send_announcement($window, "No such nick.");
   }
 };
 
@@ -217,7 +222,7 @@ on whois => sub {
 
 on realname_change => sub {
   my ($self, $connection, $nick, $realname) = @_;
-  $self->avatars->{$nick} = realname_avatar($realname);
+  $connection->avatars->{$nick} = realname_avatar($realname);
 };
 
 on shutdown => sub {

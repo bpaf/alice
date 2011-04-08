@@ -156,11 +156,6 @@ has 'user' => (
   default => $ENV{USER}
 );
 
-has avatars => (
-  is => 'rw',
-  default => sub {{}},
-);
-
 sub BUILDARGS {
   my ($class, %options) = @_;
 
@@ -358,9 +353,33 @@ sub reload_config {
   }
 }
 
-sub format_info {
-  my ($self, $session, $body, %options) = @_;
-  $self->info_window->format_message($session, $body, %options);
+sub send_announcement {
+  my ($self, $window, $body) = @_;
+  
+  my $message = $window->format_announcement($body);
+  $self->broadcast($message);
+}
+
+sub send_event {
+  my ($self, $window, $event, $nick, $body) = @_;
+
+  my $message = $window->format_event($event, $nick, $body);
+  $self->broadcast($message);
+}
+
+sub send_message {
+  my ($self, $window, $nick, $body) = @_;
+
+  my $connection = $self->get_connection($window->network);
+  my %options = (
+    mono => $self->is_monospace_nick($nick),
+    self => $connection->nick eq $nick,
+    avatar => $connection->nick_avatar($nick) || "",
+    highlight => $self->is_highlight($connection->nick, $body),
+  );
+
+  my $message = $window->format_message($nick, $body, %options);
+  $self->broadcast($message);
 }
 
 sub broadcast {
@@ -521,11 +540,6 @@ sub tabsets {
 sub connection_windows {
   my ($self, $conn) = @_;
   grep {$_->network eq $conn->id} $self->windows;
-}
-
-sub nick_avatar {
-  my ($self, $nick) = @_;
-  return $self->avatars->{$nick};
 }
 
 __PACKAGE__->meta->make_immutable;
