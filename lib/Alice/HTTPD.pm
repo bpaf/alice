@@ -1,7 +1,6 @@
 package Alice::HTTPD;
 
 use AnyEvent;
-use AnyEvent::HTTP;
 
 use Twiggy::Server;
 use Plack::Builder;
@@ -11,7 +10,6 @@ use Plack::Session::State::Cookie;
 
 use Alice::HTTP::Request;
 use Alice::Stream;
-use Alice::Commands;
 
 use JSON;
 use Encode;
