@@ -1,6 +1,7 @@
-package Alice::History;
+package Alice::Role::History;
 
-use Any::Moose;
+use Any::Moose 'Role';
+
 use AnyEvent::DBI;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use SQL::Abstract;
@@ -24,14 +25,26 @@ has sql => (
 has dbfile => (
   is => 'ro',
   isa => 'Str',
-  #required => 1,
+  lazy => 1,
+  default => sub {
+    my $self = shift;
+    return $self->config->path."/log.db";
+  }
 );
+
+before init => sub {
+  my $self = shift;
+  copy($self->assetdir."/log.db", $self->dbfile) unless -e $self->dbfile;
+};
 
 sub store {
   my ($self, %fields) = @_;
+  return unless $self->config->logging;
+
+  $fields{user} = $self->user;
+  $fields{'time'} = time;
   my ($stmt, @bind) = $self->sql->insert("messages", \%fields);
   $self->dbi->exec($stmt, @bind, sub {});
 }
 
-__PACKAGE__->meta->make_immutable;
 1;
