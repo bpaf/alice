@@ -195,10 +195,7 @@ route save => sub {
   }
 
   $self->reload_config($new_config);
-
-  $self->broadcast(
-    $self->format_info("config", "saved")
-  );
+  $self->log(info => "config saved");
 
   $res->ok;
 };
