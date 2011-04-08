@@ -1,4 +1,4 @@
-package Alice::Events;
+package Alice::Role::Events;
 
 use Any::Moose 'Role';
 use IRC::Formatting::HTML qw/irc_to_html/;
@@ -188,7 +188,7 @@ on nicklist_update => sub {
   my ($self, $connection, $channel, @nicks) = @_;
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $window->nicks(\@nicks);
+    $window->nicks(@nicks);
     if ($window->disabled) {
       $window->disabled(0);
       $self->broadcast($window->connect_action);

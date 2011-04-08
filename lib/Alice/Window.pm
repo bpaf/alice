@@ -1,12 +1,14 @@
 package Alice::Window;
 
-use Encode;
-use utf8;
+use Any::Moose;
+use AnyEvent;
+
 use Alice::MessageBuffer;
 use Text::MicroTemplate qw/encoded_string/;
 use IRC::Formatting::HTML qw/irc_to_html/;
-use Any::Moose;
-use AnyEvent;
+use Encode;
+
+with 'Alice::Role::Template';
 
 my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
 
@@ -102,7 +104,7 @@ sub all_nicks {
   my ($self, $modes) = @_;
 
   return $self->is_channel ?
-         [ $self->nicks($self->title, $modes) ]
+         [ $self->nicks ]
        : [ $self->title ];
 }
 
@@ -134,8 +136,8 @@ sub join_action {
     nicks     => $self->all_nicks,
     window    => $self->serialized,
     html => {
-      window  => $self->render("window", $self),
-      tab     => $self->render("tab", $self),
+      window  => $self->render("window"),
+      tab     => $self->render("tab"),
     },
   };
 }
@@ -242,7 +244,7 @@ sub close_action {
 
 sub nick_table {
   my $self = shift;
-  return _format_nick_table($self->all_nicks(1));
+  return _format_nick_table($self->all_nicks);
 }
 
 sub _format_nick_table {
@@ -284,11 +286,6 @@ sub hashtag {
   my $path = $self->type eq "privmsg" ? "users" : "channels";
   
   return "/" . $self->network . "/$path/" . $name;
-}
-
-sub render {
-  my ($self, $template, @data) = @_;
-  $Alice::TEMPLATE->render_file("$template.html", $self, @data)->as_string;
 }
 
 __PACKAGE__->meta->make_immutable;

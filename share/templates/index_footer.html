@@ -47,7 +47,7 @@
         <div id="tabs_container">
           <ul id="tabs">
           <? for my $window (@windows) { ?>
-            <?= $_mt->render_file('tab.html', $_[0], $window) ?>
+            <?= $_mt->render_file('tab.html', $window) ?>
           <? } ?>
           </ul>
         </div>
