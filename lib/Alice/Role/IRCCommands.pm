@@ -88,7 +88,7 @@ command say => {
 };
 
 command msg => {
-  opts => qr{(\S+)\s+(\S*)},
+  opts => qr{(\S+)\s*(.*)},
   desc => "Sends a message to a nick.",
   connection => 1,
   cb => sub  {
