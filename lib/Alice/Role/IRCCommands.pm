@@ -2,6 +2,9 @@ package Alice::Role::IRCCommands;
 
 use Any::Moose 'Role';
 
+use Try::Tiny;
+use Class::Throwable qw/ServerRequired InvalidServer ChannelRequired/;
+
 our %COMMANDS;
 my $SRVOPT = qr/(?:\-(\S+)\s+)/;
 
@@ -11,8 +14,12 @@ sub commands {
 
 sub irc_command {
   my ($self, $window, $line) = @_;
-  eval { $self->match_irc_command($window, $line) };
-  $self->send_announcement($window, $@) if $@;
+  try {
+    $self->match_irc_command($window, $line)
+  }
+  catch {
+    $self->send_announcement($window, $_->getMessage);
+  }
 }
 
 sub match_irc_command {
@@ -36,19 +43,23 @@ sub match_irc_command {
           $network = $1;
         }
 
-        die "Must specify a network for /$name" unless $network;
+        throw NetworkRequired
+          "Must specify a network for /$name" unless $network; 
 
         my $connection = $self->get_connection($network);
 
-        $connection or die "The $network network does not exist.";
-        $connection->is_connected or die "The $network network is not connected.";
+        throw InvalidNetwork "The $network network does not exist."
+          unless $connection;
+
+        throw InvalidNetwork "The $network network is not connected"
+          unless $connection->is_connected;
 
         $req->{connection} = $connection;
       }
 
       # must be in a channel
       if ($command->{channel} and !$window->is_channel) {
-        die "Must be in a channel for /$name";
+        throw ChannelRequired "Must be in a channel for /$command->{name}.";
       }
 
       # gather any options
@@ -72,6 +83,7 @@ sub command {
 }
 
 command say => {
+  name => "say",
   connection => 1,
   opts => qr{(.*)},
   cb => sub {
@@ -88,6 +100,7 @@ command say => {
 };
 
 command msg => {
+  name => "msg",
   opts => qr{(\S+)\s*(.*)},
   desc => "Sends a message to a nick.",
   connection => 1,
@@ -108,6 +121,7 @@ command msg => {
 };
 
 command nick => {
+  name => "nick",
   opts => qr{(\S+)},
   connection => 1,
   eg => "/NICK [-<server name>] <new nick>",
@@ -123,6 +137,7 @@ command nick => {
 };
 
 command qr{names|n} => {
+  name => "names",
   in_channel => 1,
   eg => "/NAMES [-avatars]",
   desc => "Lists nicks in current channel.",
@@ -134,6 +149,7 @@ command qr{names|n} => {
 };
 
 command qr{join|j} => {
+  name => "join",
   opts => qr{(\S+)\s*(\S+)?},
   connection => 1,
   eg => "/JOIN [-<server name>] <channel> [<password>]",
@@ -147,6 +163,7 @@ command qr{join|j} => {
 };
 
 command create => {
+  name => "create",
   opts => qr{(\S+)},
   connection => 1,
   cb => sub  {
