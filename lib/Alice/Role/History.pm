@@ -5,6 +5,7 @@ use Any::Moose 'Role';
 use AnyEvent::DBI;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use SQL::Abstract;
+use File::Copy;
 
 has dbi => (
   is => 'ro',
