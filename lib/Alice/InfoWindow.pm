@@ -22,14 +22,15 @@ sub all_nicks {[]}
 
 sub format_message {
   my ($self, $from, $body, %options) = @_;
+
   my $html = irc_to_html($body, classes => 1);
+
   my $message = {
     type   => "message",
     event  => "say",
     nick   => $from,
     window => $self->serialized,
     ($options{source} ? (source => $options{source}) : ()),
-    html   => encoded_string($html),
     self   => $options{self} ? 1 : 0,
     hightlight  => $options{highlight} ? 1 : 0,
     msgid       => $self->buffer->next_msgid,
@@ -38,7 +39,7 @@ sub format_message {
     consecutive => $from eq $self->buffer->previous_nick ? 1 : 0,
   };
 
-  $message->{html} = $self->render("message", $message);
+  $message->{html} = $self->render("message", $message, encoded_string($html));
 
   $self->buffer->add($message);
   return $message;

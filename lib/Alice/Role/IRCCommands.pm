@@ -3,7 +3,7 @@ package Alice::Role::IRCCommands;
 use Any::Moose 'Role';
 
 our %COMMANDS;
-my $SRVOPT = qr/(?:\-(\S+)\s+)?/;
+my $SRVOPT = qr/(?:\-(\S+)\s+)/;
 
 sub commands {
   return grep {$_->{eg}} values %COMMANDS;
@@ -12,15 +12,17 @@ sub commands {
 sub irc_command {
   my ($self, $window, $line) = @_;
   eval { $self->match_irc_command($window, $line) };
-  $self->announce($@) if $@;
+  $self->send_announcement($window, $@) if $@;
 }
 
 sub match_irc_command {
   my ($self, $window, $line) = @_;
 
+  $line = "/say $line" unless substr($line, 0, 1) eq "/";
+
   for my $name (keys %COMMANDS) {
 
-    if ($line =~ m{^/$name\s*(.*)}) {
+    if ($line =~ m{^/$name\b\s*(.*)}) {
 
       my $command = $COMMANDS{$name};
       my $args = $1;
@@ -28,8 +30,11 @@ sub match_irc_command {
 
       # determine the connection if it is required
       if ($command->{connection}) {
-        my ($network) = ($args =~ s/^$SRVOPT//);
-        $network ||= $window->network;
+        my $network = $window->network;
+
+        if ($args =~ s/^$SRVOPT//) {
+          $network = $1;
+        }
 
         die "Must specify a network for /$name" unless $network;
 
@@ -56,6 +61,7 @@ sub match_irc_command {
       }
 
       $command->{cb}->($self, $req);
+      last;
     }
   }
 }
@@ -67,17 +73,17 @@ sub command {
 
 command say => {
   connection => 1,
-  channel => 1,
   opts => qr{(.*)},
   cb => sub {
     my ($self, $req) = @_;
 
     my $msg = $req->{opts}[0];
     my $window = $req->{window};
+    my $connection = $req->{connection};
 
-    $self->broadcast($window->format_message($msg));
-    $window->connection->send_long_line(PRIVMSG => $window->title, $msg);
-    $self->store(nick => $window->nick, channel => $window->title, body => $msg);
+    $self->send_message($window, $connection->nick, $msg);
+    $connection->send_long_line(PRIVMSG => $window->title, $msg);
+    $self->store(nick => $connection->nick, channel => $window->title, body => $msg);
   },
 };
 
@@ -95,7 +101,7 @@ command msg => {
 
     if ($msg) {
       my $connection = $req->{connection};
-      $self->broadcast($new_window->format_message($new_window->nick, $msg));
+      $self->send_message($new_window, $connection->nick, $msg);
       $connection->send_srv(PRIVMSG => $nick, $msg);
     }
   }
@@ -116,18 +122,18 @@ command nick => {
   }
 };
 
-command qr{n(ames)?} => {
+command qr{names|n} => {
   in_channel => 1,
   eg => "/NAMES [-avatars]",
   desc => "Lists nicks in current channel.",
   cb => sub  {
     my ($self, $req) = @_;
     my $window = $req->{window};
-    $self->broadcast($window->format_announcement($window->nick_table));
+    $self->send_announcement($window, $window->nick_table);
   },
 };
 
-command qr{j(oin)?} => {
+command qr{join|j} => {
   opts => qr{(\S+)\s+(\S+)?},
   eg => "/JOIN [-<server name>] <channel> [<password>]",
   desc => "Joins the specified channel.",
@@ -175,12 +181,12 @@ command clear =>  {
   desc => "Clears lines from current window.",
   cb => sub {
     my ($self, $req) = @_;
-    $req->window->buffer->clear;
-    $self->broadcast($req->window->clear_action);
+    $req->{window}->buffer->clear;
+    $self->broadcast($req->{window}->clear_action);
   },
 };
 
-command qr{t(opic)?} => {
+command qr{topic|t} => {
   name => 'topic',
   opts => qr{(.+)?},
   channel => 1,
@@ -195,12 +201,12 @@ command qr{t(opic)?} => {
 
     if ($new_topic) {
       my $connection = $req->{connection};
-      $window->topic({string => $new_topic, nick => $window->nick, time => time});
+      $window->topic({string => $new_topic, nick => $connection->nick, time => time});
       $connection->send_srv(TOPIC => $window->title, $new_topic);
     }
     else {
       my $topic = $window->topic;
-      $self->broadcast($window->format_event("topic", $topic->{author}, $topic->{string}));
+      $self->send_event($window, "topic", $topic->{author}, $topic->{string});
     }
   }
 };
@@ -234,7 +240,7 @@ command me =>  {
       my $window = $req->{window};
       my $connection = $req->{connection};
 
-      $self->broadcast($window->format_message("\x{2022} $action"));
+      $self->send_message($window, $window->nick, "\x{2022} $action");
       $action = AnyEvent::IRC::Util::encode_ctcp(["ACTION", $action]);
       $connection->send_srv(PRIVMSG => $window->title, $action);
     }
@@ -277,11 +283,11 @@ command disconnect => {
         $connection->log(info => "Canceled reconnect timer");
       }
       else {
-        $self->broadcast($window->format_announcement("Already disconnected"));
+        $self->send_announcement($window, "Already disconnected");
       }
     }
     else {
-      $self->broadcast($window->format_announcement("$network isn't one of your networks!"));
+      $self->send_announcement($window, "$network isn't one of your networks!");
     }
   },
 };
@@ -300,7 +306,7 @@ command 'connect' => {
 
     if ($connection) {
       if ($connection->is_connected) {
-        $self->broadcast($window->format_announcement("Already connected"));
+        $self->send_announcement($window, "Already connected");
       }
       elsif ($connection->reconnect_timer) {
         $connection->cancel_reconnect;
@@ -312,7 +318,7 @@ command 'connect' => {
       }
     }
     else {
-      $self->broadcast($window->format_announcement("$network isn't one of your networks"));
+      $self->send_announcement($window, "$network isn't one of your networks");
     }
   }
 };
@@ -328,7 +334,7 @@ command ignore =>  {
     if (my $nick = $req->{opts}[0]) {
       my $window = $req->{window};
       $self->add_ignore($nick);
-      $self->broadcast($window->format_announcement("Ignoring $nick"));
+      $self->send_announcement($window, "Ignoring $nick");
     }
   },
 };
@@ -344,7 +350,7 @@ command unignore =>  {
     if (my $nick = $req->{opts}[0]) {
       my $window = $req->{window};
       $self->remove_ignore($nick);
-      $self->broadcast($window->format_announcement("No longer ignoring $nick"));
+      $self->send_announcement($window, "No longer ignoring $nick");
     }
   },
 };
@@ -360,11 +366,11 @@ command ignores => {
     $msg = "none" unless $msg;
 
     my $window = $req->{window};
-    $self->broadcast($window->format_announcement("Ignoring:\n$msg"));
+    $self->send_announcement($window, "Ignoring:\n$msg");
   },
 };
 
-command qr{w(indow)?} =>  {
+command qr{window|w} =>  {
   name => 'window',
   opts => qr{(\d+|next|prev(?:ious)?)},
   eg => "/WINDOW <window number>",
@@ -393,11 +399,11 @@ command away =>  {
     my $window = $req->{window};
 
     if (my $message = $req->{opts}[0]) {
-      $self->broadcast($window->format_announcement("Setting away status: $message"));
+      $self->send_announcement($window, "Setting away status: $message");
       $self->set_away($message);
     }
     else {
-      $self->broadcast($window->format_announcement("Removing away status."));
+      $self->send_announcement($window, "Removing away status.");
       $self->set_away;
     }
   }
@@ -416,11 +422,11 @@ command invite =>  {
     my $window = $req->{opts};
 
     if ($nick and $channel){
-      $self->broadcast($window->format_announcement("Inviting $nick to $channel"));
+      $self->send_announcement($window, "Inviting $nick to $channel");
       $req->{connection}->send_srv(INVITE => $nick, $channel);   
     }
     else {
-      $self->broadcast($window->format_announcement("Please specify both a nickname and a channel."));
+      $self->send_announcement($window, "Please specify both a nickname and a channel.");
     }
   },
 };
@@ -436,19 +442,19 @@ command help => {
 
     if (!$command) {
       my $commands = join " ", map {uc $_->{name}} grep {$_->{eg}} values %COMMANDS;
-      $self->broadcast($window->format_announcement('/HELP <command> for help with a specific command'));
-      $self->broadcast($window->format_announcement("Available commands: $commands"));
+      $self->send_announcement($window, '/HELP <command> for help with a specific command');
+      $self->send_announcement($window, "Available commands: $commands");
       return;
     }
 
     for (values %COMMANDS) {
       if ($_->{name} eq lc $command) {
-        $self->broadcast($window->format_announcement("$_->{eg}\n$_->{desc}"));
+        $self->send_announcement($window, "$_->{eg}\n$_->{desc}");
         return;
       }
     }
 
-    $self->broadcast($window->format_announcement("No help for ".uc $command));
+    $self->send_announcement($window, "No help for ".uc $command);
   }
 };
 

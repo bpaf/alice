@@ -8,7 +8,7 @@ use List::MoreUtils qw/uniq none any/;
 use Any::Moose;
 use Encode;
 
-use parent 'Object::Event';
+extends 'Alice::Connection';
 
 {
   no warnings;
@@ -371,6 +371,7 @@ sub nick_change {
   my @channels = $self->nick_channels($new_nick);
   $self->realnames->{$new_nick} = delete $self->realnames->{$old_nick};
   $self->event(nick_change => $old_nick, $new_nick, @channels);
+  $self->event(self_nick_change => $new_nick) if $is_self;
 }
 
 sub invite {

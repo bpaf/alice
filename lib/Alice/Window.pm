@@ -102,10 +102,7 @@ sub serialized {
 
 sub all_nicks {
   my ($self, $modes) = @_;
-
-  return $self->is_channel ?
-         [ $self->nicks ]
-       : [ $self->title ];
+  return $self->is_channel ? $self->nicks : [ $self->title ];
 }
 
 sub connect_action {
@@ -182,39 +179,27 @@ sub format_event {
 }
 
 sub format_message {
-  my ($self, $nick, $body) = @_;
+  my ($self, $nick, $body, %opts) = @_;
 
-  my $monospace = $self->app->is_monospace_nick($nick);
   # pass the inverse => italic option if this is NOT monospace
-  my $html = irc_to_html($body, classes => 1, ($monospace ? () : (invert => "italic")));
+  my $html = irc_to_html($body, classes => 1, ($opts{mono} ? () : (invert => "italic")));
 
-  my $own_nick = $self->nick;
   my $message = {
     type      => "message",
     event     => "say",
     nick      => $nick,
-    avatar    => $self->app->nick_avatar($nick),
+    avatar    => $opts{avatar} || "",
     window    => $self->serialized,
-    html      => encoded_string($html),
-    self      => $own_nick eq $nick,
+    self      => $opts{self},
     msgid     => $self->buffer->next_msgid,
     timestamp => time,
-    monospaced => $monospace,
+    monospaced => $opts{mono},
     consecutive => $nick eq $self->buffer->previous_nick,
   };
 
-  unless ($message->{self}) {
-    if ($message->{highlight} = $self->is_highlight($body)) {
-      my $idle_w; $idle_w = AE::idle sub {
-        undef $idle_w;
-        $self->app->send_highlight($nick, $body, $self->title);
-      };
-    }
-  }
-
-  $message->{html} = $self->render("message", $message);
-
+  $message->{html} = $self->render("message", $message, encoded_string($html));
   $self->buffer->add($message);
+
   return $message;
 }
 
