@@ -13,24 +13,29 @@ use Alice::Tabset;
 use Any::Moose;
 
 use File::Copy;
-use Text::MicroTemplate::File;
 use List::Util qw/first/;
 use List::MoreUtils qw/any none/;
 use AnyEvent::IRC::Util qw/filter_colors/;
 use IRC::Formatting::HTML qw/html_to_irc/;
 use File::ShareDir qw/dist_dir/;
+use FindBin;
 use Encode;
+
+with 'Alice::Role::Template';
+with 'Alice::Role::Events';
+with 'Alice::Role::HTTPRoutes';
+with 'Alice::Role::IRCCommands';
 
 our $VERSION = '0.19';
 
-our $ASSETDIR = "share";
-our $TEMPLATE = Text::MicroTemplate::File->new(
-  include_path => "$ASSETDIR/templates",
-  cache        => 2,
-);
-
-
-with 'Alice::Events';
+our $ASSETDIR = do {
+  if (-e  "$FindBin::Bin/../share/static") {
+    "$FindBin::Bin/../share/";
+  }
+  else {
+    dist_dir('App-Alice');
+  }
+};
 
 has config => (
   is       => 'rw',
@@ -55,7 +60,13 @@ has httpd => (
   isa     => 'Alice::HTTPD',
   lazy    => 1,
   default => sub {
-    Alice::HTTPD->new(app => shift);
+    my $self = shift;
+    Alice::HTTPD->new(
+      address => $self->config->http_address,
+      port => $self->config->http_port,
+      assetdir => $ASSETDIR,
+      sessiondir => $self->config->path."/sessions",
+    );
   },
 );
 
@@ -68,15 +79,6 @@ has streams => (
 sub add_stream {unshift @{shift->streams}, @_}
 sub no_streams {@{$_[0]->streams} == 0}
 sub stream_count {scalar @{$_[0]->streams}}
-
-has commands => (
-  is      => 'ro',
-  isa     => 'Alice::Commands',
-  lazy    => 1,
-  default => sub {
-    Alice::Commands->new(commands_file => "$ASSETDIR/commands.pl");
-  }
-);
 
 has history => (
   is      => 'rw',
@@ -133,15 +135,6 @@ sub get_window {$_[0]->_windows->{$_[1]}}
 sub remove_window {delete $_[0]->_windows->{$_[1]}}
 sub window_ids {keys %{$_[0]->_windows}}
 
-has 'template' => (
-  is => 'ro',
-  isa => 'Text::MicroTemplate::File',
-  lazy => 1,
-  default => sub {
-    my $self = shift;
-  },
-);
-
 has 'info_window' => (
   is => 'ro',
   isa => 'Alice::InfoWindow',
@@ -173,7 +166,7 @@ sub BUILDARGS {
 
   my $self = {};
 
-  for (qw/commands history template user httpd/) {
+  for (qw/history template user httpd/) {
     if (exists $options{$_}) {
       $self->{$_} = $options{$_};
       delete $options{$_};
@@ -201,10 +194,8 @@ sub run {
 
 sub init {
   my $self = shift;
-  $self->commands;
   $self->history if $self->config->logging;
   $self->info_window;
-  $self->template;
   $self->httpd;
 
   $self->add_new_connection($_, $self->config->servers->{$_})
@@ -241,11 +232,6 @@ sub new_window_buffer {
     id => $id,
     store_class => $self->config->message_store
   );
-}
-
-sub reload_commands {
-  my $self = shift;
-  $self->commands->reload_handlers;
 }
 
 sub tab_order {
@@ -431,7 +417,7 @@ sub handle_message {
 
     for (split /\n/, $message->{msg}) {
       eval {
-        $self->commands->handle($self, $_, $window) if length $_;
+        $self->irc_command($window, $_) if length $_;
       };
       if ($@) {
         warn $@;
@@ -450,11 +436,6 @@ sub purge_disconnects {
   my ($self) = @_;
   $self->log(debug => "removing broken streams");
   $self->streams([grep {!$_->closed} @{$self->streams}]);
-}
-
-sub render {
-  my ($self, $template, @data) = @_;
-  $TEMPLATE->render_file("$template.html", $self, @data)->as_string;
 }
 
 sub is_highlight {

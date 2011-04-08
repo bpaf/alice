@@ -4,7 +4,6 @@ use strict;
 use warnings;
 
 use FindBin;
-use File::ShareDir qw/dist_dir/;
 
 BEGIN {
   my $bin = $FindBin::Bin; 

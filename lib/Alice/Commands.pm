@@ -52,7 +52,7 @@ sub handle {
 sub determine_connection {
   my ($self, $app, $window, $network) = @_;
 
-  my $connection = $network ? $app->get_connection($network) : $window->connection;
+  my $connection = $app->get_connection($network || $window->network);
 
   if (!$connection and $network) {
     $window->reply("$network is not one of your networks");
