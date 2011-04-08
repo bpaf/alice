@@ -229,7 +229,7 @@ command whois =>  {
 
 command me =>  {
   name => 'me',
-  opts => qr{(\S+)},
+  opts => qr{(.+)},
   eg => "/ME <message>",
   connection => 1,
   desc => "Sends a CTCP ACTION to the current window.",
@@ -241,7 +241,7 @@ command me =>  {
       my $window = $req->{window};
       my $connection = $req->{connection};
 
-      $self->send_message($window, $window->nick, "\x{2022} $action");
+      $self->send_message($window, $connection->nick, "\x{2022} $action");
       $action = AnyEvent::IRC::Util::encode_ctcp(["ACTION", $action]);
       $connection->send_srv(PRIVMSG => $window->title, $action);
     }
