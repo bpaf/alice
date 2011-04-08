@@ -1,4 +1,4 @@
-package Alice::HTTPD;
+package Alice::Role::HTTPD;
 
 use AnyEvent;
 
@@ -13,38 +13,13 @@ use Alice::Stream;
 
 use JSON;
 use Encode;
-use Any::Moose;
+use Any::Moose 'Role';
 
 has httpd => (
   is  => 'rw',
   lazy => 1,
   builder => "_build_httpd",
 );
-
-has address => (
-  is => 'ro',
-  default => '127.0.0.1',
-);
-
-has port => (
-  is => 'ro',
-  default => 8080,
-);
-
-has sessiondir => (
-  is => 'ro',
-  required => 1,
-);
-
-has assetdir => (
-  is => 'ro',
-  required => 1,
-);
-
-sub BUILD {
-  my $self = shift;
-  $self->httpd;
-}
 
 sub _build_httpd {
   my $self = shift;
@@ -53,15 +28,16 @@ sub _build_httpd {
   # eval in case server can't bind port
   eval {
     $httpd = Twiggy::Server->new(
-      host => $self->address,
-      port => $self->port,
+      host => $self->config->http_address,
+      port => $self->config->http_port,
     );
     $httpd->register_service(
       builder {
         if ($self->auth_enabled) {
-          mkdir $self->sessiondir unless -d $self->sessiondir;
+          my $session = $self->config->path."/sessions";
+          mkdir $session unless -d $session;
           enable "Session",
-            store => Plack::Session::Store::File->new(dir => $self->sessiondir),
+            store => Plack::Session::Store::File->new(dir => $session),
             state => Plack::Session::State::Cookie->new(expires => 60 * 60 * 24 * 7);
         }
         enable "Static", path => qr{^/static/}, root => $self->assetdir;
@@ -69,7 +45,7 @@ sub _build_httpd {
         sub {
           my $env = shift;
           return sub {
-            eval { $self->dispatch($Alice::APP, $env, shift) };
+            eval { $self->dispatch($env, shift) };
             warn $@ if $@;
           }
         }
@@ -82,7 +58,7 @@ sub _build_httpd {
 }
 
 sub dispatch {
-  my ($self, $app, $env, $cb) = @_;
+  my ($self, $env, $cb) = @_;
 
   my $req = Alice::HTTP::Request->new($env, $cb);
   my $res = $req->new_response(200);
@@ -94,7 +70,7 @@ sub dispatch {
     }
   }
 
-  return $app->http_request($req, $res);
+  return $self->http_request($req, $res);
 }
 
 sub auth_failed {
@@ -116,15 +92,4 @@ sub is_logged_in {
   return $session->{is_logged_in};
 }
 
-sub shutdown {
-  my $self = shift;
-  $self->httpd(undef);
-}
-
-sub auth_enabled {
-  my $self = shift;
-  $Alice::APP->auth_enabled;
-}
-
-__PACKAGE__->meta->make_immutable;
 1;

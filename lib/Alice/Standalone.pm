@@ -2,28 +2,13 @@ package Alice::Standalone;
 
 use Any::Moose;
 use AnyEvent;
-use Alice::HTTPD;
 
 extends 'Alice';
+with 'Alice::Role::HTTPD';
 
 has cv => (
   is       => 'rw',
   isa      => 'AnyEvent::CondVar'
-);
-
-has httpd => (
-  is      => 'rw',
-  isa     => 'Alice::HTTPD',
-  lazy    => 1,
-  default => sub {
-    my $self = shift;
-    Alice::HTTPD->new(
-      address => $self->config->http_address,
-      port => $self->config->http_port,
-      assetdir => $self->assetdir,
-      sessiondir => $self->config->path."/sessions",
-    );
-  },
 );
 
 after run => sub {
@@ -49,7 +34,6 @@ before init_shutdown => sub {
 
 after shutdown => sub {
   my $self = shift;
-  $self->httpd->shutdown;
   $self->cv->send;
 };
 
