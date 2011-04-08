@@ -1,18 +1,18 @@
 use Test::More;
-use App::Alice;
-use App::Alice::Test::MockIRC;
-use App::Alice::Test::NullHistory;
+use Alice;
+use Alice::Test::MockIRC;
+use Alice::Test::NullHistory;
 use Test::TCP;
 
-my $history = App::Alice::Test::NullHistory->new;
-my $app = App::Alice->new(
+my $history = Alice::Test::NullHistory->new;
+my $app = Alice->new(
   history => $history,
   path => 't/alice',
   file => "test_config",
   port => empty_port(),
 );
 
-my $cl = App::Alice::Test::MockIRC->new(nick => "tester");
+my $cl = Alice::Test::MockIRC->new(nick => "tester");
 $app->config->servers->{"test"} = {
   host => "not.real.server",
   port => 6667,
@@ -21,33 +21,32 @@ $app->config->servers->{"test"} = {
   on_connect => ["JOIN #test2"],
 };
 
-my $irc = App::Alice::IRC->new(
-  alias => "test",
-  app => $app,
+my $connection = Alice::Connection::IRC->new(
+  id => "test",
   cl => $cl,
 );
-$app->add_irc("test", $irc);
+$app->add_connection("test", $connection);
 
 # joining channels
-ok $irc->is_connected, "connect";
-ok my $window = $app->find_window("#test", $irc), "auto-join channel";
-ok $app->find_window("#test2", $irc), "on_connect join command";
+ok $connection->is_connected, "connect";
+ok my $window = $app->find_window("#test", $connection), "auto-join channel";
+ok $app->find_window("#test2", $connection), "on_connect join command";
 
 # nicks
-is $irc->nick, "tester", "nick set";
-ok $irc->includes_nick("test"), "existing nick in channel";
-is_deeply $irc->get_nick_info("test")->[2], ['#test'], "existing nick info set";
+is $connection->nick, "tester", "nick set";
+ok $connection->includes_nick("test"), "existing nick in channel";
+is_deeply $connection->get_nick_info("test")->[2], ['#test'], "existing nick info set";
 
 $cl->send_cl(":nick!user\@host JOIN #test");
-ok $irc->includes_nick("nick"), "nick added after join";
-is_deeply $irc->get_nick_info("nick")->[2], ['#test'], "new nick info set";
+ok $connection->includes_nick("nick"), "nick added after join";
+is_deeply $connection->get_nick_info("nick")->[2], ['#test'], "new nick info set";
 
 $cl->send_cl(":nick!user\@host NICK nick2");
-ok $irc->includes_nick("nick2"), "nick change";
-ok !$irc->includes_nick("nick"), "old nick removed after nick change";
+ok $connection->includes_nick("nick2"), "nick change";
+ok !$connection->includes_nick("nick"), "old nick removed after nick change";
 
 $cl->send_cl(":nick!user\@host PART #test");
-ok !$irc->includes_nick("nick"), "nick gone after part";
+ok !$connection->includes_nick("nick"), "nick gone after part";
 
 # topic
 is $window->topic->{string}, "no topic set", "default initial topic";
@@ -62,18 +61,18 @@ is $window->topic->{author}, "nick", "external topic change author";
 
 # part channel
 $cl->send_srv(PART => "#test");
-ok !$app->find_window("#test", $irc), "part removes window";
+ok !$app->find_window("#test", $connection), "part removes window";
 
 # messages
 $cl->send_cl(":nick!user\@host PRIVMSG tester :hi");
-ok $app->find_window("nick", $irc), "private message";
+ok $app->find_window("nick", $connection), "private message";
 
 $cl->send_cl(":nick!user\@host PRIVMSG #test3 :hi");
-ok !$app->find_window("#test3", $irc), "msg to unjoined channel doesn't create window";
+ok !$app->find_window("#test3", $connection), "msg to unjoined channel doesn't create window";
 
 # disconnect
 $cl->disconnect;
-ok !$irc->is_connected, "disconnect";
+ok !$connection->is_connected, "disconnect";
 
 undef $app;
 undef $cl;
