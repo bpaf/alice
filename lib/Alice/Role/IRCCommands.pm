@@ -229,7 +229,7 @@ command whois =>  {
 
 command me =>  {
   name => 'me',
-  re => qr{(\S+)},
+  opts => qr{(\S+)},
   eg => "/ME <message>",
   connection => 1,
   desc => "Sends a CTCP ACTION to the current window.",
@@ -265,7 +265,7 @@ command quote => {
 
 command disconnect => {
   name => 'disconnect',
-  re => qr{(\S+)},
+  opts => qr{(\S+)},
   eg => "/DISCONNECT <server name>",
   desc => "Disconnects from the specified server.",
   cb => sub  {
@@ -295,7 +295,7 @@ command disconnect => {
 
 command 'connect' => {
   name => 'connect',
-  re => qr{(\S+)},
+  opts => qr{(\S+)},
   eg => "/CONNECT <server name>",
   desc => "Connects to the specified server.",
   cb => sub {
@@ -342,7 +342,7 @@ command ignore =>  {
 
 command unignore =>  {
   name => 'unignore',
-  re => qr{(\S+)},
+  opts => qr{(\S+)},
   eg => "/UNIGNORE <nick>",
   desc => "Removes nick from ignore list.",
   cb => sub {
