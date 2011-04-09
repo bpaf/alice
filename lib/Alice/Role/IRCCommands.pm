@@ -7,7 +7,7 @@ use Try::Tiny;
 use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired/;
 
 our %COMMANDS;
-my $SRVOPT = qr/(?:\-(\S+)\s+)/;
+my $SRVOPT = qr/\-(\S+)\s*/;
 
 sub commands {
   return grep {$_->{eg}} values %COMMANDS;
@@ -203,7 +203,7 @@ command clear =>  {
   desc => "Clears lines from current window.",
   cb => sub {
     my ($self, $req) = @_;
-    $req->{window}->buffer->clear;
+    $req->{window}->clear;
     $self->broadcast($req->{window}->clear_action);
   },
 };

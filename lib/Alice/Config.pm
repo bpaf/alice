@@ -118,12 +118,6 @@ has image_prefix => (
   default => 'https://static.usealice.org/i/',
 );
 
-has message_store => (
-  is      => 'rw',
-  isa     => 'Str',
-  default => 'Memory',
-);
-
 has callback => (
   is      => 'ro',
   isa     => 'CodeRef',
@@ -140,6 +134,7 @@ sub add_ignore {push @{shift->ignore}, @_}
 
 sub BUILD {
   my $self = shift;
+
   $self->load;
   mkdir $self->path unless -d $self->path;
 }

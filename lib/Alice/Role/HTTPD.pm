@@ -8,6 +8,7 @@ use Plack::Middleware::Static;
 use Plack::Session::Store::File;
 use Plack::Session::State::Cookie;
 
+use Alice::HTTP::Middleware::WebSocket;
 use Alice::HTTP::Request;
 use Alice::Stream;
 
@@ -53,6 +54,7 @@ sub _build_httpd {
   }
   catch {
     warn "Error: could not start http server\n";
+    warn "$_" if $_;
     $self->shutdown;
   };
 
