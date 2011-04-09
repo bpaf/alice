@@ -31,12 +31,6 @@ has 'cl' => (
   default => sub {AnyEvent::IRC::Client->new(send_initial_whois => 1)},
 );
 
-has config => (
-  is => 'rw',
-  isa => 'HashRef',
-  required => 1,
-);
-
 has quitmsg => (
   is => 'rw',
   default => "alice.",

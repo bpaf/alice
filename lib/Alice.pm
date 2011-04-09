@@ -20,7 +20,6 @@ with 'Alice::Role::Template';
 with 'Alice::Role::Events';
 with 'Alice::Role::HTTPRoutes';
 with 'Alice::Role::IRCCommands';
-with 'Alice::Role::History';
 
 our $VERSION = '0.19';
 
@@ -138,9 +137,6 @@ sub run {
 
 sub init {
   my $self = shift;
-
-  my $init = $self->config->path."/init.pl";
-  require $init if -e $init;
 
   $self->add_window($self->info_window);
 
