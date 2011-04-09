@@ -14,7 +14,6 @@ has cv => (
 after run => sub {
   my $self = shift;
 
-  $Alice::APP = $self;
   my @sigs = map {AE::signal $_, sub {$self->init_shutdown}} qw/INT QUIT/;
 
   $self->cv(AE::cv);

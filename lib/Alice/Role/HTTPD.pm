@@ -41,7 +41,7 @@ sub _build_httpd {
             state => Plack::Session::State::Cookie->new(expires => 60 * 60 * 24 * 7);
         }
         enable "Static", path => qr{^/static/}, root => $self->assetdir;
-        enable "WebSocket";
+        enable "+Alice::HTTP::Middleware::WebSocket";
         sub {
           my $env = shift;
           return sub {

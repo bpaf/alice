@@ -1,20 +1,25 @@
-package Plack::Middleware::WebSocket;
+#
+# NOTE: This is copied from Plack::Middleware::Websocket
+#       because it is not yet on CPAN
+#
+
+package Alice::Middleware::WebSocket;
 use strict;
 use warnings;
-use parent 'Plack::Middleware';
+use parent 'Alice::Middleware';
 
 our $VERSION = '0.01';
 
 sub call {
     my ($self, $env) = @_;
 
-    $env->{'websocket.impl'} = Plack::Middleware::WebSocket::Impl->new($env);
+    $env->{'websocket.impl'} = Alice::Middleware::WebSocket::Impl->new($env);
 
     return $self->app->($env);
 }
 
-package Plack::Middleware::WebSocket::Impl;
-use Plack::Util::Accessor qw(env error_code);
+package Alice::Middleware::WebSocket::Impl;
+use Alice::Util::Accessor qw(env error_code);
 use Digest::MD5 qw(md5);
 use Scalar::Util qw(weaken);
 use IO::Handle;
@@ -94,55 +99,3 @@ sub anyevent_read_type {
 }
 
 1;
-
-__END__
-
-=head1 NAME
-
-Plack::Middleware::WebSocket - Support WebSocket implementation
-
-=head1 SYNOPSIS
-
-  builder {
-      enable 'WebSocket';
-      sub {
-          my $env = shift;
-          ...
-          if (my $fh = $env->{'websocket.impl'}->handshake) {
-              # interact via $fh
-              ...
-          } else {
-              $res->code($env->{'websocket.impl'}->error_code);
-          }
-      };
-  };
-
-
-=head1 DESCRIPTION
-
-Plack::Middleware::WebSocket provides WebSocket implementation through $env->{'websocket.impl'}.
-Currently implements draft-ietf-hybi-thewebsocketprotocol-00 <http://tools.ietf.org/html/draft-ietf-hybi-thewebsocketprotocol-00>.
-
-=head1 METHODS
-
-=over 4
-
-=item my $fh = $env->{'websocket.impl'}->handshake;
-
-Starts WebSocket handshake and returns filehandle on successful handshake.
-If failed, $env->{'websocket.impl'}->error_code is set to an HTTP code.
-
-=back
-
-=head1 AUTHOR
-
-motemen E<lt>motemen@gmail.comE<gt>
-
-=head1 SEE ALSO
-
-=head1 LICENSE
-
-This library is free software; you can redistribute it and/or modify
-it under the same terms as Perl itself.
-
-=cut
