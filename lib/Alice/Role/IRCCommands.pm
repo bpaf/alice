@@ -2,8 +2,9 @@ package Alice::Role::IRCCommands;
 
 use Any::Moose 'Role';
 
+use List::MoreUtils qw/none/;
 use Try::Tiny;
-use Class::Throwable qw/ServerRequired InvalidServer ChannelRequired/;
+use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired/;
 
 our %COMMANDS;
 my $SRVOPT = qr/(?:\-(\S+)\s+)/;
@@ -35,6 +36,12 @@ sub match_irc_command {
       my $args = $1;
       my $req = {line => $line, window => $window};
 
+      # must be in a channel
+      if (none {$_ eq $window->type} @{$command->{window_type}}) {
+        my $types = join " or ", @{$command->{window_type}};
+        throw ChannelRequired "Must be in a $types for /$command->{name}.";
+      }
+
       # determine the connection if it is required
       if ($command->{connection}) {
         my $network = $window->network;
@@ -44,7 +51,7 @@ sub match_irc_command {
         }
 
         throw NetworkRequired
-          "Must specify a network for /$name" unless $network; 
+          "Must specify a network for /$command->{name}" unless $network; 
 
         my $connection = $self->get_connection($network);
 
@@ -55,11 +62,6 @@ sub match_irc_command {
           unless $connection->is_connected;
 
         $req->{connection} = $connection;
-      }
-
-      # must be in a channel
-      if ($command->{channel} and !$window->is_channel) {
-        throw ChannelRequired "Must be in a channel for /$command->{name}.";
       }
 
       # gather any options
@@ -84,7 +86,7 @@ sub command {
 
 command say => {
   name => "say",
-  connection => 1,
+  window_type => [qw/channel privmsg/],
   opts => qr{(.*)},
   cb => sub {
     my ($self, $req) = @_;
@@ -138,7 +140,7 @@ command nick => {
 
 command qr{names|n} => {
   name => "names",
-  in_channel => 1,
+  window_type => [qw/channel privmsg/],
   eg => "/NAMES [-avatars]",
   desc => "Lists nicks in current channel.",
   cb => sub  {
@@ -178,6 +180,7 @@ command create => {
 
 command qr{close|wc|part} => {
   name => 'part',
+  window_type => [qw/channel privmsg/],
   eg => "/PART",
   desc => "Leaves and closes the focused window.",
   cb => sub  {
@@ -207,7 +210,7 @@ command clear =>  {
 command qr{topic|t} => {
   name => 'topic',
   opts => qr{(.+)?},
-  channel => 1,
+  window_type => ['channel'],
   connection => 1,
   eg => "/TOPIC [<topic>]",
   desc => "Shows and/or changes the topic of the current channel.",
@@ -248,6 +251,7 @@ command me =>  {
   name => 'me',
   opts => qr{(.+)},
   eg => "/ME <message>",
+  window_type => [qw/channel privmsg/],
   connection => 1,
   desc => "Sends a CTCP ACTION to the current window.",
   cb => sub {

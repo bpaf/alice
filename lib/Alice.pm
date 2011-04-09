@@ -3,7 +3,6 @@ package Alice;
 use AnyEvent;
 use Alice::Window;
 use Alice::InfoWindow;
-use Alice::MessageBuffer;
 use Alice::Connection::IRC;
 use Alice::Config;
 use Alice::Tabset;
@@ -96,10 +95,7 @@ has 'info_window' => (
   default => sub {
     my $self = shift;
     my $id = $self->_build_window_id("info", "info");
-    my $info = Alice::InfoWindow->new(
-      id       => $id,
-      buffer   => $self->new_window_buffer($id),
-    );
+    my $info = Alice::InfoWindow->new(id => $id);
     return $info;
   }
 );
@@ -171,14 +167,6 @@ sub shutdown {
   $_->close for @{$self->streams};
 }
 
-sub new_window_buffer {
-  my ($self, $id) = @_;
-  Alice::MessageBuffer->new(
-    id => $id,
-    store_class => $self->config->message_store
-  );
-}
-
 sub tab_order {
   my ($self, $window_ids) = @_;
   my $order = [];
@@ -219,7 +207,6 @@ sub create_window {
     title    => $title,
     network  => $connection->id,
     id       => $id,
-    buffer   => $self->new_window_buffer($id),
   );
   $self->add_window($window);
   return $window;
@@ -365,7 +352,7 @@ sub update_stream {
 
   for my $window (@windows) {
     $self->log(debug => "updating stream from $min for ".$window->title);
-    $window->buffer->messages($limit, $min, sub {
+    $window->messages($limit, $min, sub {
       my $msgs = shift;
       return unless @$msgs;
       $stream->send([{
