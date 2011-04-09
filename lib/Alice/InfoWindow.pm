@@ -33,15 +33,15 @@ sub format_message {
     ($options{source} ? (source => $options{source}) : ()),
     self   => $options{self} ? 1 : 0,
     hightlight  => $options{highlight} ? 1 : 0,
-    msgid       => $self->buffer->next_msgid,
+    msgid       => $self->next_msgid,
     timestamp   => time,
     monospaced  => $options{mono} ? 1 : 0,
-    consecutive => $from eq $self->buffer->previous_nick ? 1 : 0,
+    consecutive => $from eq $self->previous_nick ? 1 : 0,
   };
 
   $message->{html} = $self->render("message", $message, encoded_string($html));
 
-  $self->buffer->add($message);
+  $self->add_message($message);
   return $message;
 }
 

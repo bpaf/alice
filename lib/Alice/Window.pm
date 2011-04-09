@@ -8,13 +8,9 @@ use IRC::Formatting::HTML qw/irc_to_html/;
 use Encode;
 
 with 'Alice::Role::Template';
+with 'Alice::Role::MessageBuffer';
 
 my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
-
-has buffer => (
-  is      => 'rw',
-  required => 1,
-);
 
 has title => (
   is       => 'ro',
@@ -164,7 +160,7 @@ sub format_event {
     nick      => $nick,
     window    => $self->serialized,
     body      => $body,
-    msgid     => $self->buffer->next_msgid,
+    msgid     => $self->next_msgid,
     timestamp => time,
     nicks     => $self->all_nicks,
   };
@@ -172,7 +168,7 @@ sub format_event {
   my $html = $self->render("event", $message);
   $message->{html} = $html;
 
-  $self->buffer->add($message);
+  $self->add_message($message);
   return $message;
 }
 
@@ -189,14 +185,14 @@ sub format_message {
     avatar    => $opts{avatar} || "",
     window    => $self->serialized,
     self      => $opts{self},
-    msgid     => $self->buffer->next_msgid,
+    msgid     => $self->next_msgid,
     timestamp => time,
     monospaced => $opts{mono},
-    consecutive => $nick eq $self->buffer->previous_nick,
+    consecutive => $nick eq $self->previous_nick,
   };
 
   $message->{html} = $self->render("message", $message, encoded_string($html));
-  $self->buffer->add($message);
+  $self->add_message($message);
 
   return $message;
 }
@@ -253,12 +249,12 @@ sub _format_nick_table {
 
 sub reset_previous_nick {
   my $self = shift;
-  $self->buffer->previous_nick("");
+  $self->previous_nick("");
 }
 
 sub previous_nick {
   my $self = shift;
-  return $self->buffer->previous_nick;
+  return $self->previous_nick;
 }
 
 sub hashtag {

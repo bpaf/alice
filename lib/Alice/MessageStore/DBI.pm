@@ -1,90 +1,143 @@
 package Alice::MessageStore::DBI;
 
-use Alice::MessageBuffer;
 use AnyEvent::DBI;
 use DBI;
-use Any::Moose;
 use JSON;
 
-our $dsn = ["dbi:SQLite:dbname=share/buffer.db", "", ""];
-our $dbi = AnyEvent::DBI->new(@$dsn);
+use Any::Moose;
 
-{
-  # block to get the min msgid
-  my $dbh = DBI->connect(@$dsn);
-  my $row = $dbh->selectrow_arrayref("SELECT msgid FROM window_buffer ORDER BY msgid DESC LIMIT 1");
-  $Alice::MessageBuffer::MSGID = $row->[0] + 1 if $row;
-}
+our $DSN = ["dbi:SQLite:dbname=share/buffer.db", "", ""];
 
-our $INSERT = [];
-our $TRIM = {};
-my ($insert_t, $trim_t);
+has insert_timer => (is => 'rw');
+has trim_timer => (is => 'rw');
 
-has id => (
-  is => 'ro',
-  required => 1,
+has msgid => (
+  is => 'rw',
+  default => 1,
 );
 
-sub clear {
+has insert_queue => (
+  is => 'rw',
+  default => sub {[]},
+);
+
+has _trim_queue => (
+  is => 'rw',
+  default => sub {{}},
+);
+
+sub BUILD {
+  # block to get the min msgid
+  my $dbh = DBI->connect(@$DSN);
+  my $row = $dbh->selectrow_arrayref("SELECT msgid FROM window_buffer ORDER BY msgid DESC LIMIT 1");
+
+  $self->msgid($row->[0] + 1) if $row;
+}
+
+sub trim_queue {
   my $self = shift;
-  $dbi->exec("DELETE FROM window_buffer WHERE window_id = ?", $self->{id}, sub {});
+  return keys %{$self->_trim_queue};
+}
+
+sub clear_trim_queue {
+  my $self = shift;
+  $self->_trim_queue({});
+}
+
+has buffersize => (
+  is => 'rw',
+  default => 100,
+);
+
+has dbi => (
+  is => 'rw',
+  default => sub { AnyEvent::DBI->new(@$DSN) }
+);
+
+sub add_trim_job {
+  my ($self, $id) = @_;
+  $self->_trim_queue->{$id} = 1;
+}
+
+sub add_insert_job {
+  my ($self, $job) = @_;
+  push @{$self->insert_queue}, $job;
+}
+
+sub shift_insert_job {
+  my ($self) = @_:
+  shift @{$self->insert_queue};
+}
+
+sub clear {
+  my ($self, $id) = @_;
+  $dbi->exec("DELETE FROM window_buffer WHERE window_id = ?", $id, sub {});
 }
 
 sub messages {
-  my ($self, $limit, $msgid, $cb) = @_;
+  my ($self, $id, $limit, $msgid, $cb) = @_;
   $dbi->exec(
     "SELECT message FROM window_buffer WHERE window_id=? AND msgid > ? ORDER BY msgid DESC LIMIT ?",
-    $self->id, $msgid, $limit, sub { $cb->([map {decode_json $_->[0]} reverse @{$_[1]}]) }
+    $id, $msgid, $limit, sub { $cb->([map {decode_json $_->[0]} reverse @{$_[1]}]) }
   );
 }
 
-sub add {
-  my ($self, $message) = @_;
+sub add_message {
+  my ($self, $id, $message) = @_;
 
   # collect inserts for one second
 
-  push @$INSERT, [$self->{id}, $message->{msgid}, encode_json($message)];
-  $TRIM->{$self->{id}} = 1;
+  $self->add_insert_job([$id, $message->{msgid}, encode_json($message)]);
+  $self->add_trim_job($id);
 
-  if (!$insert_t) {
-    $insert_t = AE::timer 1, 0, \&_handle_insert;
+  if (!$self->insert_timer) {
+    $self->insert_timer(AE::timer 1, 0, $self->_handle_insert);
   }
 }
 
 sub _handle_insert {
-  my $idle_w; $idle_w = AE::idle sub {
-    if (my $row = shift @$INSERT) {
-      $dbi->exec("INSERT INTO window_buffer (window_id, msgid, message) VALUES (?,?,?)", @$row, sub{});
-    }
-    else {
-      undef $idle_w;
-      undef $insert_t;
+  my $self = shift;
+
+  return sub {
+    my $idle_w; $idle_w = AE::idle sub {
+      if (my $row = $self->shift_insert_job) {
+        $dbi->exec("INSERT INTO window_buffer (window_id, msgid, message) VALUES (?,?,?)", @$row, sub{});
+      }
+      else {
+        undef $idle_w;
+        $self->insert_timer(undef);
+      }
+    };
+  
+    if (!$self->trim_timer) {
+      $self->trim_timer(AE::timer 60, 0, $self->_handle_trim);
     }
   };
-  
-  if (!$trim_t) {
-    $trim_t = AE::timer 60, 0, \&_handle_trim;
-  }
 }
 
 sub _handle_trim {
-  my @trim = keys %$TRIM;
-  $TRIM = {};
+  my $self = shift;
 
-  my $idle_w; $idle_w = AE::idle sub {
-    if (my $window_id = shift @trim) {
-      _trim($window_id);
-    }
-    else {
-      undef $idle_w;
-      undef $trim_t;
-    }
+  return sub {
+    my @trim = $self->trim_queue;
+    $self->clear_trim_queue;
+
+    my $idle_w; $idle_w = AE::idle sub {
+      if (my $window_id = shift @trim) {
+        $self->_trim($window_id);
+      }
+      else {
+        undef $idle_w;
+        $self->trim_timer(undef);
+      }
+    };
   };
 }
 
 sub _trim {
-  my $window_id = shift;
-  $dbi->exec(
+  my ($self, $window_id) = @_;
+
+  $self->dbi->exec(
     "SELECT msgid FROM window_buffer WHERE window_id=? ORDER BY msgid DESC LIMIT 100,1",
     $window_id, sub {
       my $rows = $_[1];

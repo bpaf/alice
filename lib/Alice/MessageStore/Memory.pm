@@ -2,40 +2,53 @@ package Alice::MessageStore::Memory;
 
 use Any::Moose;
 
-has _messages => (
+has msgid => (
   is => 'rw',
-  isa => 'ArrayRef',
-  default => sub {[]}
+  default => 1,
 );
 
 has buffersize => (
-  is => 'ro',
-  default => 100
+  is => 'rw',
+  default => 100,
 );
 
-has id => (
-  is => 'ro',
-  required => 1,
+has store => (
+  is => 'rw',
+  default => sub {{}},
 );
 
-sub clear {
+sub next_msgid {
   my $self = shift;
-  $self->_messages([]);
+  $self->msgid($self->msgid + 1);
+  return $self->msgid;
 }
 
-sub add {
-  my ($self, $message) = @_;
+sub clear {
+  my ($self, $id) = @_;
+  delete $self->store->{$id};
+}
 
-  push @{$self->_messages}, $message;
-  if (@{$self->_messages} > $self->buffersize) {
-    shift @{$self->_messages};
+sub add_message {
+  my ($self, $id, $message) = @_;
+
+  push @{$self->store->{$id}}, $message;
+  if (@{$self->store->{$id}} > $self->buffersize) {
+    shift @{$self->store->{$id}};
   }
 }
 
-sub messages {
-  my ($self, $limit, $min, $cb) = @_;
+sub _messages {
+  my ($self, $id) = @_;
+  if ($self->store->{$id}) {
+    return @{$self->store->{$id}};
+  }
+  return ();
+}
 
-  my @messages = grep {$_->{msgid} > $min} @{$self->_messages};
+sub messages {
+  my ($self, $id, $limit, $min, $cb) = @_;
+
+  my @messages = grep {$_->{msgid} > $min} $self->_messages($id);
   my $total = scalar @messages;
 
   if (!$total) {
@@ -47,5 +60,4 @@ sub messages {
   $cb->([ @messages[$total - $limit .. $total - 1] ]);
 }
 
-__PACKAGE__->meta->make_immutable;
 1;
