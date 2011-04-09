@@ -16,7 +16,8 @@ sub commands {
 sub irc_command {
   my ($self, $window, $line) = @_;
   try {
-    $self->match_irc_command($window, $line)
+    my ($command, $args) = $self->match_irc_command($line);
+    $self->run_irc_command($window, $command, $args);
   }
   catch {
     $self->send_announcement($window, $_->getMessage);
@@ -24,59 +25,62 @@ sub irc_command {
 }
 
 sub match_irc_command {
-  my ($self, $window, $line) = @_;
+  my ($self, $line) = @_;
 
   $line = "/say $line" unless substr($line, 0, 1) eq "/";
 
   for my $name (keys %COMMANDS) {
 
     if ($line =~ m{^/$name\b\s*(.*)}) {
-
-      my $command = $COMMANDS{$name};
       my $args = $1;
-      my $req = {line => $line, window => $window};
-
-      # must be in a channel
-      if ($command->{window_type} and none {$_ eq $window->type} @{$command->{window_type}}) {
-        my $types = join " or ", @{$command->{window_type}};
-        throw ChannelRequired "Must be in a $types for /$command->{name}.";
-      }
-
-      # determine the connection if it is required
-      if ($command->{connection}) {
-        my $network = $window->network;
-
-        if ($args =~ s/^$SRVOPT//) {
-          $network = $1;
-        }
-
-        throw NetworkRequired
-          "Must specify a network for /$command->{name}" unless $network; 
-
-        my $connection = $self->get_connection($network);
-
-        throw InvalidNetwork "The $network network does not exist."
-          unless $connection;
-
-        throw InvalidNetwork "The $network network is not connected"
-          unless $connection->is_connected;
-
-        $req->{connection} = $connection;
-      }
-
-      # gather any options
-      if (my $opt_re = $command->{opts}) {
-        my (@opts) = ($args =~ /$opt_re/);
-        $req->{opts} = \@opts;
-      }
-      else {
-        $req->{opts} = [];
-      }
-
-      $command->{cb}->($self, $req);
-      last;
+      return ($name, $args);
     }
   }
+}
+
+sub run_irc_command {
+  my ($self, $window, $name, $args) = @_;
+  my $command = $COMMANDS{$name};
+
+  my $req = {window => $window};
+
+  # must be in a channel
+  if ($command->{window_type} and none {$_ eq $window->type} @{$command->{window_type}}) {
+    my $types = join " or ", @{$command->{window_type}};
+    throw ChannelRequired "Must be in a $types for /$command->{name}.";
+  }
+
+  # determine the connection if it is required
+  if ($command->{connection}) {
+    my $network = $window->network;
+    if ($args =~ s/^$SRVOPT//) {
+      $network = $1;
+    }
+
+    throw NetworkRequired "Must specify a network for /$command->{name}"
+      unless $network; 
+
+    my $connection = $self->get_connection($network);
+
+    throw InvalidNetwork "The $network network does not exist."
+      unless $connection;
+
+    throw InvalidNetwork "The $network network is not connected"
+      unless $connection->is_connected;
+
+    $req->{connection} = $connection;
+  }
+
+  # gather any options
+  if (my $opt_re = $command->{opts}) {
+    my (@opts) = ($args =~ /$opt_re/);
+    $req->{opts} = \@opts;
+  }
+  else {
+    $req->{opts} = [];
+  }
+
+  $command->{cb}->($self, $req);
 }
 
 sub command {
