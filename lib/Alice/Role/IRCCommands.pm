@@ -98,7 +98,6 @@ command say => {
 
     $self->send_message($window, $connection->nick, $msg);
     $connection->send_long_line(PRIVMSG => $window->title, $msg);
-    $self->store(nick => $connection->nick, channel => $window->title, body => $msg);
   },
 };
 
