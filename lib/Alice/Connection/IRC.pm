@@ -405,7 +405,7 @@ sub part {
 sub multiple_left {
   my ($self, $cl, $msg, $channel, @nicks) = @_;
   my $reason = $msg->{params}[0];
-  $self->event(parted => $channel, $reason);
+  $self->event(part => $channel, $reason);
   $self->event(nicklist_update => $channel, $self->channel_nicks($channel));
 }
 

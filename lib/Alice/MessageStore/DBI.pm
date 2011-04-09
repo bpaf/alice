@@ -26,7 +26,14 @@ has _trim_queue => (
   default => sub {{}},
 );
 
+sub next_msgid {
+  my $self = shift;
+  $self->msgid($self->msgid + 1);
+  $self->msgid;
+}
+
 sub BUILD {
+  my $self = shift;
   # block to get the min msgid
   my $dbh = DBI->connect(@$DSN);
   my $row = $dbh->selectrow_arrayref("SELECT msgid FROM window_buffer ORDER BY msgid DESC LIMIT 1");
@@ -65,18 +72,18 @@ sub add_insert_job {
 }
 
 sub shift_insert_job {
-  my ($self) = @_:
+  my ($self) = @_;
   shift @{$self->insert_queue};
 }
 
 sub clear {
   my ($self, $id) = @_;
-  $dbi->exec("DELETE FROM window_buffer WHERE window_id = ?", $id, sub {});
+  $self->dbi->exec("DELETE FROM window_buffer WHERE window_id = ?", $id, sub {});
 }
 
 sub messages {
   my ($self, $id, $limit, $msgid, $cb) = @_;
-  $dbi->exec(
+  $self->dbi->exec(
     "SELECT message FROM window_buffer WHERE window_id=? AND msgid > ? ORDER BY msgid DESC LIMIT ?",
     $id, $msgid, $limit, sub { $cb->([map {decode_json $_->[0]} reverse @{$_[1]}]) }
   );
@@ -101,7 +108,7 @@ sub _handle_insert {
   return sub {
     my $idle_w; $idle_w = AE::idle sub {
       if (my $row = $self->shift_insert_job) {
-        $dbi->exec("INSERT INTO window_buffer (window_id, msgid, message) VALUES (?,?,?)", @$row, sub{});
+        $self->dbi->exec("INSERT INTO window_buffer (window_id, msgid, message) VALUES (?,?,?)", @$row, sub{});
       }
       else {
         undef $idle_w;
@@ -143,7 +150,7 @@ sub _trim {
       my $rows = $_[1];
       if (@$rows) {
         my $minid = $rows->[0][0];
-        $dbi->exec(
+        $self->dbi->exec(
           "DELETE FROM window_buffer WHERE window_id=? AND msgid < ?",
           $window_id, $minid, sub{}
         );

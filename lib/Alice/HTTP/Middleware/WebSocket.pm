@@ -3,23 +3,23 @@
 #       because it is not yet on CPAN
 #
 
-package Alice::Middleware::WebSocket;
+package Alice::HTTP::Middleware::WebSocket;
 use strict;
 use warnings;
-use parent 'Alice::Middleware';
+use parent 'Plack::Middleware';
 
 our $VERSION = '0.01';
 
 sub call {
     my ($self, $env) = @_;
 
-    $env->{'websocket.impl'} = Alice::Middleware::WebSocket::Impl->new($env);
+    $env->{'websocket.impl'} = Alice::HTTP::Middleware::WebSocket::Impl->new($env);
 
     return $self->app->($env);
 }
 
-package Alice::Middleware::WebSocket::Impl;
-use Alice::Util::Accessor qw(env error_code);
+package Alice::HTTP::Middleware::WebSocket::Impl;
+use Plack::Util::Accessor qw(env error_code);
 use Digest::MD5 qw(md5);
 use Scalar::Util qw(weaken);
 use IO::Handle;

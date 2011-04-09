@@ -138,6 +138,10 @@ sub run {
 
 sub init {
   my $self = shift;
+
+  my $init = $self->config->path."/init.pl";
+  require $init if -e $init;
+
   $self->add_window($self->info_window);
 
   $self->add_new_connection($_, $self->config->servers->{$_})
