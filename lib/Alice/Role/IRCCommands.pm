@@ -37,7 +37,7 @@ sub match_irc_command {
       my $req = {line => $line, window => $window};
 
       # must be in a channel
-      if (none {$_ eq $window->type} @{$command->{window_type}}) {
+      if ($command->{window_type} and none {$_ eq $window->type} @{$command->{window_type}}) {
         my $types = join " or ", @{$command->{window_type}};
         throw ChannelRequired "Must be in a $types for /$command->{name}.";
       }
@@ -87,6 +87,7 @@ sub command {
 command say => {
   name => "say",
   window_type => [qw/channel privmsg/],
+  connection => 1,
   opts => qr{(.*)},
   cb => sub {
     my ($self, $req) = @_;
