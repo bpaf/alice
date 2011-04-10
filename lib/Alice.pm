@@ -20,9 +20,6 @@ with 'Alice::Role::Log';
 
 our $VERSION = '0.19';
 
-require Alice::MessageStore::DBI;
-$Alice::Role::MessageBuffer::STORE = Alice::MessageStore::DBI->new;
-
 has _connections => (
   is      => 'rw',
   isa     => 'HashRef',
@@ -79,6 +76,11 @@ has 'user' => (
 sub run {
   my $self = shift;
   $self->loadconfig;
+
+  if (-e $self->configdir."/init.pl") {
+    eval {do $self->configdir."/init.pl"};
+    warn "Error running init file: $@\n" if $@;
+  }
 }
 
 sub init {

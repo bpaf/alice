@@ -2,7 +2,6 @@ package Alice::Role::Config;
 
 use Any::Moose 'Role';
 
-use FindBin;
 use Data::Dumper;
 use Getopt::Long;
 use POSIX;
