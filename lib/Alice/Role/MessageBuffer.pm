@@ -1,9 +1,17 @@
 package Alice::Role::MessageBuffer;
 
-use Alice::MessageStore::DBI;
 use Any::Moose 'Role';
 
-our $STORE = Alice::MessageStore::DBI->new;
+our $STORE;
+
+# return a shared message store for all buffers
+sub store {
+  if (!$STORE) {
+    require Alice::MessageStore::Memory;
+    $STORE = Alice::MessageStore::Memory->new;
+  }
+  return $STORE;
+}
 
 has previous_nick => (
   is => 'rw',
@@ -12,18 +20,18 @@ has previous_nick => (
 
 sub msgid {
   my $self = shift;
-  return $STORE->msgid;
+  return $self->store->msgid;
 }
 
 sub next_msgid {
   my $self = shift;
-  $STORE->next_msgid;
+  $self->store->next_msgid;
 }
 
 sub clear {
   my $self = shift;
   $self->previous_nick("");
-  $STORE->clear($self->id);
+  $self->store->clear($self->id);
 }
 
 sub add_message {
@@ -31,13 +39,13 @@ sub add_message {
   $message->{event} eq "say" ? $self->previous_nick($message->{nick})
                              : $self->previous_nick("");
 
-  $STORE->add_message($self->id, $message);
+  $self->store->add_message($self->id, $message);
 }
 
 sub messages {
   my ($self, $limit, $min, $cb) = @_;
 
-  my $msgid = $STORE->msgid;
+  my $msgid = $self->store->msgid;
 
   $min = 0 unless $min > 0;
   $min = $msgid if $min > $msgid;
@@ -45,7 +53,7 @@ sub messages {
   $limit = $msgid - $min if $min + $limit > $msgid;
   $limit = 0 if $limit < 0;
 
-  return $STORE->messages($self->id, $limit, $min, $cb);
+  return $self->store->messages($self->id, $limit, $min, $cb);
 }
 
 1;
