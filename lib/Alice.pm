@@ -1,37 +1,24 @@
 package Alice;
 
 use AnyEvent;
+use Any::Moose;
+
 use Alice::Window;
 use Alice::InfoWindow;
 use Alice::Connection::IRC;
-use Alice::Config;
-use Alice::Tabset;
 
-use Any::Moose;
-
-use List::MoreUtils qw/any/;
-use AnyEvent::IRC::Util qw/filter_colors/;
 use IRC::Formatting::HTML qw/html_to_irc/;
-use File::ShareDir qw/dist_dir/;
-use FindBin;
 use Encode;
 
+with 'Alice::Role::Assetdir';
+with 'Alice::Role::Config';
 with 'Alice::Role::Template';
 with 'Alice::Role::Events';
 with 'Alice::Role::HTTPRoutes';
 with 'Alice::Role::IRCCommands';
+with 'Alice::Role::Log';
 
 our $VERSION = '0.19';
-
-our $ASSETDIR = do {
-  my $bin = $FindBin::Bin;
-  -e "$bin/../share/static" ? "$bin/../share" : dist_dir('App-Alice');
-};
-
-has config => (
-  is       => 'rw',
-  isa      => 'Alice::Config',
-);
 
 has _connections => (
   is      => 'rw',
@@ -55,24 +42,6 @@ has streams => (
 sub add_stream {unshift @{shift->streams}, @_}
 sub no_streams {@{$_[0]->streams} == 0}
 sub stream_count {scalar @{$_[0]->streams}}
-
-sub log {
-  my ($self, $level, $message, %options) = @_;
-
-  if ($level eq "info") {
-    my $from = delete $options{network} || "config";
-    my $line = $self->info_window->format_message($from, $message, %options);
-    $self->broadcast($line);
-  }
-
-  if ($self->config->show_debug) {
-    my ($sec, $min, $hour, $day, $mon, $year) = localtime(time);
-    my $datestring = sprintf "%02d:%02d:%02d %02d/%02d/%02d",
-                     $hour, $min, $sec, $mon, $day, $year % 100;
-    print STDERR substr($level, 0, 1) . ", [$datestring] "
-               . sprintf("% 5s", $level) . " -- : $message\n";
-  }
-}
 
 has _windows => (
   is        => 'rw',
@@ -104,35 +73,9 @@ has 'user' => (
   default => $ENV{USER}
 );
 
-sub BUILDARGS {
-  my ($class, %options) = @_;
-
-  my $self = {};
-
-  for (qw/user/) {
-    if (exists $options{$_}) {
-      $self->{$_} = $options{$_};
-      delete $options{$_};
-    }
-  }
-
-  $self->{config} = Alice::Config->new(
-    %options,
-    callback => sub {$self->{config}->merge(\%options)}
-  );
-
-  return $self;
-}
-
 sub run {
   my $self = shift;
-
-  # wait for config to finish loading
-  my $w; $w = AE::idle sub {
-    return unless $self->config->{loaded};
-    undef $w;
-    $self->init;
-  };
+  $self->loadconfig;
 }
 
 sub init {
@@ -140,8 +83,8 @@ sub init {
 
   $self->add_window($self->info_window);
 
-  $self->add_new_connection($_, $self->config->servers->{$_})
-    for keys %{$self->config->servers};
+  $self->add_new_connection($_, $self->servers->{$_})
+    for keys %{$self->servers};
 }
 
 sub init_shutdown {
@@ -173,12 +116,12 @@ sub tab_order {
   for my $count (0 .. scalar @$window_ids - 1) {
     if (my $window = $self->get_window($window_ids->[$count])) {
       next unless $window->is_channel
-           and $self->config->servers->{$window->network};
+           and $self->servers->{$window->network};
       push @$order, $window->title;
     }
   }
-  $self->config->order($order);
-  $self->config->write;
+  $self->order($order);
+  $self->writeconfig;
 }
 
 sub find_window {
@@ -231,12 +174,12 @@ sub find_or_create_window {
 sub sorted_windows {
   my $self = shift;
   my %o;
-  if ($self->config->order) {
-    %o = map {$self->config->order->[$_] => sprintf "%02d", $_ + 2}
-             0 .. @{$self->config->order} - 1;
+  if ($self->order) {
+    %o = map {$self->order->[$_] => sprintf "%02d", $_ + 2}
+             0 .. @{$self->order} - 1;
   }
   $o{info} = "01";
-  my $prefix = scalar @{$self->config->order} + 1;
+  my $prefix = scalar @{$self->order} + 1;
   sort { ($o{$a->title} || $prefix.$a->sort_name) cmp ($o{$b->title} || $prefix.$b->sort_name) }
        $self->windows;
 }
@@ -252,7 +195,7 @@ sub close_window {
 sub add_new_connection {
   my ($self, $name, $config) = @_;
 
-  $self->config->servers->{$name} = $config;
+  $self->servers->{$name} = $config;
   my $conn = Alice::Connection::IRC->new(config => $config);
   $self->add_connection($conn);
 }
@@ -260,16 +203,16 @@ sub add_new_connection {
 sub reload_config {
   my ($self, $new_config) = @_;
 
-  my %prev = map {$_ => $self->config->servers->{$_}{ircname} || ""}
-             keys %{ $self->config->servers };
+  my %prev = map {$_ => $self->servers->{$_}{ircname} || ""}
+             keys %{ $self->servers };
 
   if ($new_config) {
-    $self->config->merge($new_config);
-    $self->config->write;
+    $self->mergeconfig($new_config);
+    $self->writeconfig;
   }
   
-  for my $network (keys %{$self->config->servers}) {
-    my $config = $self->config->servers->{$network};
+  for my $network (keys %{$self->servers}) {
+    my $config = $self->servers->{$network};
     if (!$self->has_connection($network)) {
       $self->add_new_connection($network, $config);
     }
@@ -283,7 +226,7 @@ sub reload_config {
     }
   }
   for my $connection ($self->connections) {
-    if (!$self->config->servers->{$connection->id}) {
+    if (!$self->servers->{$connection->id}) {
       $self->remove_window($_->id) for $self->connection_windows($connection);
       $connection->shutdown;
     }
@@ -389,92 +332,16 @@ sub purge_disconnects {
   $self->streams([grep {!$_->closed} @{$self->streams}]);
 }
 
-sub is_highlight {
-  my ($self, $own_nick, $body) = @_;
-  $body = filter_colors $body;
-  any {$body =~ /(?:\W|^)\Q$_\E(?:\W|$)/i }
-      (@{$self->config->highlights}, $own_nick);
-}
-
-sub is_monospace_nick {
-  my ($self, $nick) = @_;
-  any {$_ eq $nick} @{$self->config->monospace_nicks};
-}
-
-sub is_ignore {
-  my ($self, $nick) = @_;
-  any {$_ eq $nick} $self->config->ignores;
-}
-
-sub add_ignore {
-  my ($self, $nick) = @_;
-  $self->config->add_ignore($nick);
-  $self->config->write;
-}
-
-sub remove_ignore {
-  my ($self, $nick) = @_;
-  $self->config->ignore([ grep {$nick ne $_} $self->config->ignores ]);
-  $self->config->write;
-}
-
-sub ignores {
-  my $self = shift;
-  return $self->config->ignores;
-}
-
-sub static_url {
-  my ($self, $file) = @_;
-  return $self->config->static_prefix . $file;
-}
-
-sub auth_enabled {
-  my $self = shift;
-
-  # cache it
-  if (!defined $self->{_auth_enabled}) {
-    $self->{_auth_enabled} = ($self->config->auth
-              and ref $self->config->auth eq 'HASH'
-              and $self->config->auth->{user}
-              and $self->config->auth->{pass});
-  }
-
-  return $self->{_auth_enabled};
-}
-
-sub authenticate {
-  my ($self, $user, $pass) = @_;
-  $user ||= "";
-  $pass ||= "";
-  if ($self->auth_enabled) {
-    return ($self->config->auth->{user} eq $user
-       and $self->config->auth->{pass} eq $pass);
-  }
-  return 1;
-}
-
 sub set_away {
   my ($self, $message) = @_;
   my @args = (defined $message ? (AWAY => $message) : "AWAY");
   $_->send_srv(@args) for $self->open_connections;
 }
 
-sub tabsets {
-  my $self = shift;
-  map {
-    Alice::Tabset->new(
-      name => $_,
-      windows => $self->config->tabsets->{$_},
-    );
-  } sort keys %{$self->config->tabsets};
-}
-
 sub connection_windows {
   my ($self, $conn) = @_;
   grep {$_->network eq $conn->id} $self->windows;
 }
-
-sub assetdir {$ASSETDIR}
 
 __PACKAGE__->meta->make_immutable;
 1;

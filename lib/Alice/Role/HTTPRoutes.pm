@@ -33,13 +33,12 @@ sub route {
 
 sub merged_options {
   my ($self, $req) = @_;
-  my $config = $self->config;
   return {
-   images => $req->param('images') || $config->images,
-   avatars => $req->param('avatars') || $config->avatars,
-   debug  => $req->param('debug')  || ($config->show_debug ? 'true' : 'false'),
-   timeformat => $req->param('timeformat') || $config->timeformat,
-   image_prefix => $req->param('image_prefix') || $config->image_prefix,
+   images => $req->param('images') || $self->images,
+   avatars => $req->param('avatars') || $self->avatars,
+   debug  => $req->param('debug')  || ($self->show_debug ? 'true' : 'false'),
+   timeformat => $req->param('timeformat') || $self->timeformat,
+   image_prefix => $req->param('image_prefix') || $self->image_prefix,
   };
 }
 
@@ -113,8 +112,8 @@ route "" => sub {
 
   push @queue, sub {
     my $html = $self->render('index_footer', $options, @windows);
-    $self->config->first_run(0);
-    $self->config->write;
+    $self->first_run(0);
+    $self->writeconfig;
     return $html;
   };
 
@@ -148,8 +147,8 @@ route savetabsets => sub {
     $tabsets->{$set} = $wins->[0] eq 'empty' ? [] : $wins;
   }
 
-  $self->config->tabsets($tabsets);
-  $self->config->write;
+  $self->tabsets($tabsets);
+  $self->writeconfig;
 
   $res->body($self->render('tabset_menu'));
   $res->send;
@@ -286,7 +285,7 @@ route export => sub {
   my ($self, $req, $res) = @_;
   $res->content_type("text/plain; charset=utf-8");
   {
-    $res->body(to_json($self->app->config->serialized,
+    $res->body(to_json($self->serialized,
       {utf8 => 1, pretty => 1}));
   }
   $res->send;
