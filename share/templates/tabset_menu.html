@@ -3,12 +3,12 @@
 <ul id="tabset_menu">
   <li class="separate-bottom">Edit Sets</li>
   <li>All tabs</li>
-  <? for my $set ($app->tabsets) { ?>
-    <li><?= $set->name ?></li>
+  <? for my $set (keys %{$app->tabsets}) { ?>
+    <li><?= $set ?></li>
   <? } ?>
   <script type="text/javascript">
     if (window.alice) {
-      <? my $tabsets = {map {$_->name => $_->windows } $app->tabsets}; ?>
+      <? my $tabsets = $app->tabsets; ?>
       alice.tabsets = <?= Text::MicroTemplate::encoded_string(JSON::encode_json $tabsets) ?>;
       alice.showSet(alice.selectedSet);
     }

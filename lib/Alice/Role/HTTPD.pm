@@ -29,13 +29,13 @@ sub _build_httpd {
   # eval in case server can't bind port
   try {
     $httpd = Twiggy::Server->new(
-      host => $self->config->http_address,
-      port => $self->config->http_port,
+      host => $self->http_address,
+      port => $self->http_port,
     );
     $httpd->register_service(
       builder {
         if ($self->auth_enabled) {
-          my $session = $self->config->path."/sessions";
+          my $session = $self->configdir."/sessions";
           mkdir $session unless -d $session;
           enable "Session",
             store => Plack::Session::Store::File->new(dir => $session),

@@ -23,7 +23,7 @@ after run => sub {
 after init => sub {
   my $self = shift;
   $self->httpd;
-  print STDERR "Location: http://".$self->config->http_address.":".$self->config->http_port."/\n";
+  print STDERR "Location: http://".$self->http_address.":".$self->http_port."/\n";
 };
 
 before init_shutdown => sub {

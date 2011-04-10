@@ -3,13 +3,26 @@ package Alice::MessageStore::DBI;
 use AnyEvent::DBI;
 use DBI;
 use JSON;
+use File::Copy;
 
 use Any::Moose;
 
-our $DSN = ["dbi:SQLite:dbname=share/buffer.db", "", ""];
+with 'Alice::Role::Assetdir';
 
 has insert_timer => (is => 'rw');
 has trim_timer => (is => 'rw');
+
+has dsn => (
+  is => 'ro',
+  lazy => 1,
+  default => sub {
+    my $self = shift;
+    if (!-e $self->configdir."/buffer.db") {
+      copy($self->assetdir."/buffer.db", $self->configdir."/buffer.db");
+    }
+    ["dbi:SQLite:dbname=".$self->configdir."/buffer.db", "", ""]
+  }
+);
 
 has msgid => (
   is => 'rw',
@@ -35,7 +48,7 @@ sub next_msgid {
 sub BUILD {
   my $self = shift;
   # block to get the min msgid
-  my $dbh = DBI->connect(@$DSN);
+  my $dbh = DBI->connect(@{$self->dsn});
   my $row = $dbh->selectrow_arrayref("SELECT msgid FROM window_buffer ORDER BY msgid DESC LIMIT 1");
 
   $self->msgid($row->[0] + 1) if $row;
@@ -58,7 +71,11 @@ has buffersize => (
 
 has dbi => (
   is => 'rw',
-  default => sub { AnyEvent::DBI->new(@$DSN) }
+  lazy => 1,
+  default => sub {
+    my $self = shift;
+    AnyEvent::DBI->new(@{$self->dsn})
+  }
 );
 
 sub add_trim_job {
