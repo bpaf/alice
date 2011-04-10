@@ -20,6 +20,9 @@ with 'Alice::Role::Log';
 
 our $VERSION = '0.19';
 
+require Alice::MessageStore::DBI;
+$Alice::Role::MessageBuffer::STORE = Alice::MessageStore::DBI->new;
+
 has _connections => (
   is      => 'rw',
   isa     => 'HashRef',
