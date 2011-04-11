@@ -247,14 +247,17 @@ sub auth_enabled {
 }
 
 sub authenticate {
-  my ($self, $user, $pass) = @_;
+  my ($self, $user, $pass, $cb) = @_;
   $user ||= "";
   $pass ||= "";
+  my $success = 1;
+
   if ($self->auth_enabled) {
-    return ($self->auth->{user} eq $user
-       and $self->auth->{pass} eq $pass);
+    my $success = ($self->auth->{user} eq $user
+                  and $self->auth->{pass} eq $pass);
   }
-  return 1;
+
+  $cb->($success);
 }
 
 sub is_highlight {

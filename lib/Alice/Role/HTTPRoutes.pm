@@ -214,7 +214,7 @@ route tabs => sub {
 };
 
 route login => sub {
-  my ($self, $app, $req, $res) = @_;
+  my ($self, $req, $res) = @_;
 
   my $dest = $req->param("dest") || "/";
 
@@ -228,13 +228,13 @@ route login => sub {
   elsif (my $user = $req->param('username')
      and my $pass = $req->param('password')) {
 
-    $self->authenticate($app, $user, $pass, sub {
+    $self->authenticate($user, $pass, sub {
       my $success = shift;
       if ($success) {
         $req->env->{"psgix.session"} = {
           is_logged_in => 1,
           username     => $user,
-          userid       => $app->user,
+          userid       => $self->user,
         };
         $res->redirect($dest);
       }
@@ -255,8 +255,8 @@ route login => sub {
 };
 
 route logout => sub {
-  my ($self, $app, $req, $res) = @_;
-  $_->close for @{$app->streams};
+  my ($self, $req, $res) = @_;
+  $_->close for @{$self->streams};
   if (!$self->auth_enabled) {
     $res->redirect("/");
   } else {
