@@ -171,12 +171,17 @@ on disconnect => sub {
 
 on 'connect' => sub {
   my ($self, $connection, $reason) = @_;
+
+  my @windows = $self->connection_windows($connection);
+  my @events = map {$_->format_event("reconnect", "You", $_->network)} @windows;
+
   $self->broadcast(
+    @events,
     {
       type => "action",
       event => "connect",
       network => $connection->id,
-      windows => [],
+      windows => [], # let JOIN or NAMES event toggle window status
     }
   );
 };
