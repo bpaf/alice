@@ -16,6 +16,15 @@ use Alice::Stream;
 use Encode;
 use Try::Tiny;
 
+our $SERVER = "Feersum";
+eval "use $SERVER;";
+if ($@) {
+  warn "$SERVER server not found, using Twiggy instead\n";
+  $SERVER = "Twiggy";
+}
+
+with "Alice::Role::HTTPD::$SERVER";
+
 has httpd => (
   is  => 'rw',
   lazy => 1,
