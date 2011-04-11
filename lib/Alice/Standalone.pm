@@ -4,7 +4,7 @@ use Any::Moose;
 use AnyEvent;
 
 extends 'Alice';
-with 'Alice::Role::HTTPD';
+with 'Alice::Role::HTTPD::Feersum';
 
 has cv => (
   is       => 'rw',

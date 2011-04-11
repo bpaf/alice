@@ -1,8 +1,11 @@
-package Alice::Role::HTTPD;
+package Alice::Role::HTTPD::Feersum;
 
 use AnyEvent;
 
-use Twiggy::Server;
+use Feersum;
+use Socket qw/SOMAXCONN/;
+use IO::Socket::INET;
+
 use Plack::Builder;
 use Plack::Middleware::Static;
 use Plack::Session::Store::File;
@@ -28,11 +31,17 @@ sub _build_httpd {
 
   # eval in case server can't bind port
   try {
-    $httpd = Twiggy::Server->new(
-      host => $self->http_address,
-      port => $self->http_port,
+    $httpd = Feersum->endjinn;
+    my $sock = IO::Socket::INET->new(
+      LocalAddr => $self->http_address.":".$self->http_port,
+      ReuseAddr => 1,
+      Proto => 'tcp',
+      Listen => SOMAXCONN,
+      Blocking => 0,
     );
-    $httpd->register_service(
+    $httpd->use_socket($sock);
+      
+    $httpd->psgi_request_handler(
       builder {
         if ($self->auth_enabled) {
           my $session = $self->configdir."/sessions";
