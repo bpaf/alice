@@ -9,6 +9,7 @@ use POSIX;
 use AnyEvent::AIO;
 use IO::AIO;
 use List::MoreUtils qw/any/;
+use AnyEvent::IRC::Util qw/filter_colors/;
 
 has [qw/images avatars alerts/] => (
   is      => 'rw',
@@ -268,7 +269,7 @@ sub is_monospace_nick {
   any {$_ eq $nick} @{$self->monospace_nicks};
 }
 
-sub ignores {@{$_[0]->_ignore}}
+sub ignores {@{$_[0]->ignore}}
 
 sub is_ignore {
   my ($self, $nick) = @_;
