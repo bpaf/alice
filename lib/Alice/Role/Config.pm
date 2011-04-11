@@ -295,4 +295,11 @@ sub static_url {
   return $self->static_prefix . $file;
 }
 
+sub tabset_includes {
+  my ($self, $set, $window_id) = @_;
+  if (my $windows = $self->tabsets->{$set}) {
+    return any {$_ eq $window_id} @$windows;
+  }
+}
+
 1;

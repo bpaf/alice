@@ -19,6 +19,7 @@ sub http_request {
         $route->[1]->($self, $req, $res);
       }
       catch {
+        warn $_;
         $res->send([500, ["Content-Type", "text/plain"], ["something went wrong"]]);
       };
       return;
@@ -133,6 +134,13 @@ route safe => sub {
   $req->parameters->{images} = "hide";
   $req->parameters->{avatars} = "hide";
   $self->send_index($self, $req, $res);
+};
+
+route tabsets => sub {
+  my ($self, $req, $res) = @_;
+
+  $res->body($self->render("tabsets"));
+  $res->send;
 };
 
 route savetabsets => sub {
