@@ -9884,7 +9884,7 @@ Object.extend(Alice, {
     audio: /^http[^\s]*\.(?:wav|mp3|ogg|aiff|m4[ar])[^\/]*$/i,
     gist: /^https?:\/\/gist\.github\.com\/[0-9a-fA-F]+$/i,
     channel: /([\b>\s])(#[^\b<\s]+)/gi,
-    url: /(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/gi
+    url: /(https?:\/\/[^\s<]*)/ig
   },
 
   epochToLocal: function(epoch, format) {
@@ -10293,6 +10293,9 @@ Alice.Application = Class.create({
     this.submit.observe("click", function (e) {
         this.input.send(); e.stop()}.bind(this));
 
+    this.tabs.observe("webkitTransitionEnd", this.shiftEnd.bind(this));
+    this.tabs.observe("transitionend", this.shiftEnd.bind(this));
+
     this.makeSortable();
     this.setupTopic();
     this.setupNicklist();
@@ -10569,8 +10572,14 @@ Alice.Application = Class.create({
   },
 
   updateOverflowMenus: function() {
-    var left = "";
-    var right = "";
+    var left = $('tab_menu_left');
+    var right = $('tab_menu_right');
+
+    var left_menu = left.down('ul');
+    var right_menu = right.down('ul');
+
+    left_menu.innerHTML = "";
+    right_menu.innerHTML = "";
 
     this.windows().each(function(win) {
 
@@ -10579,27 +10588,28 @@ Alice.Application = Class.create({
       var pos = win.getTabPosition();
 
       if (pos.left) {
-        left += sprintf('<li rel="%s" class="%s">%s</a>', win.id, win.status_class, win.title)
+        var classes = win.status_class();
+        left.addClassName(classes);
+        left_menu.innerHTML += sprintf('<li rel="%s" class="%s">%s</a>', win.id, classes, win.title)
       }
       else if (pos.right) {
-        right += sprintf('<li rel="%s" class="%s">%s</a>', win.id, win.status_class, win.title)
+        var classes = win.status_class();
+        right.addClassName(classes);
+        right_menu.innerHTML += sprintf('<li rel="%s" class="%s">%s</a>', win.id, classes, win.title)
       }
 
     }.bind(this));
 
-    $('tab_menu_right').down('ul').update(right);
-    $('tab_menu_left').down('ul').update(left);
-
-    this.toggleOverflow("left", !!left);
-    this.toggleOverflow("right", !!right);
+    this.toggleMenu(left, !!left_menu.innerHTML);
+    this.toggleMenu(right, !!right_menu.innerHTML);
   },
 
-  toggleOverflow: function(side, active) {
+  toggleMenu: function(menu, active) {
     if (active) {
-      $('tab_menu_'+side).addClassName("active");
+      menu.addClassName("active");
     }
     else {
-      $('tab_menu_'+side).removeClassName("active");
+      menu.removeClassName("active");
     }
   },
 
@@ -10769,8 +10779,11 @@ Alice.Application = Class.create({
     this.tabs.style.webkitTransitionDuration = time+"s";
     this.tabs.setStyle({left: left+"px"});
     this.tabs_layout = this.tabs.getLayout();
+  },
 
-    setTimeout(this.updateOverflowMenus.bind(this), time * 1000 + 100);
+  shiftEnd: function(e) {
+    this.tabs_layout = this.tabs.getLayout();
+    this.updateOverflowMenus();
   },
 
   makeSortable: function() {
@@ -12679,7 +12692,7 @@ if (window == window.parent) {
       function (msg, win) {
         msg.select("a").filter(function(a) {
           var img = a.readAttribute("img") || a.innerHTML;
-          return Alice.RE.img.match(img);
+          return img.match(Alice.RE.img);
         }).each(function(a) {
           var image = a.readAttribute("img") || a.href;
           var hide = (alice.isMobile && image.match(/\.gif/)) || image.match(/#(nsfw|hide)$/);
