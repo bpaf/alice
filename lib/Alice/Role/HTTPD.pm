@@ -93,6 +93,7 @@ sub _build_app {
         store => Plack::Session::Store::File->new(dir => $session),
         state => Plack::Session::State::Cookie->new(expires => 60 * 60 * 24 * 7);
     }
+    enable "ContentLength";
     enable "Static", path => qr{^/static/}, root => $self->assetdir;
     enable "+Alice::HTTP::Middleware::WebSocket";
     sub {

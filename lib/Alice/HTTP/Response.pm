@@ -12,8 +12,18 @@ sub new {
   $self->status($rc)       if defined $rc;
   $self->headers($headers) if defined $headers;
   $self->body($content)    if defined $content;
+  $self->content_type("text/html; charset=utf-8");
 
   $self;
+}
+
+sub body {
+  my $self = shift;
+
+  my $content = $self->SUPER::body(@_);
+  $self->content_length(length $content) if $content;
+
+  $content;
 }
 
 sub send {
