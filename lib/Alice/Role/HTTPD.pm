@@ -39,8 +39,9 @@ sub _build_httpd {
     $self->httpd($self->build_httpd);
   }
   catch {
-    die "Error: could not start http server ($_)\n";
-    $self->shutdown;
+    warn "Error: could not start http server\n";
+    warn "$_" if $_;
+    exit 0;
   };
 
   $self->register_app($self->_build_app);
