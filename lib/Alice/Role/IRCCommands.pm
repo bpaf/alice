@@ -144,7 +144,7 @@ command nick => {
 
 command qr{names|n} => {
   name => "names",
-  window_type => [qw/channel privmsg/],
+  window_type => [qw/channel/],
   eg => "/NAMES [-avatars]",
   desc => "Lists nicks in current channel.",
   cb => sub  {
