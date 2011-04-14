@@ -33,7 +33,7 @@ sub id {
 
 sub nick {
   my $self = shift;
-  $self->config->{nick}},
-);
+  $self->config->{nick};
+}
 
 1;
