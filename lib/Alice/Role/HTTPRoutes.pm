@@ -133,7 +133,8 @@ route safe => sub {
   my ($self, $req, $res) = @_;
   $req->parameters->{images} = "hide";
   $req->parameters->{avatars} = "hide";
-  $self->send_index($self, $req, $res);
+  $req->env->{PATH_INFO} = "/";
+  $self->http_request($req, $res);
 };
 
 route tabsets => sub {
