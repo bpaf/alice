@@ -3,10 +3,6 @@ package Alice::Role::Events;
 use Any::Moose 'Role';
 use IRC::Formatting::HTML qw/irc_to_html/;
 use Scalar::Util qw/weaken/;
-use Digest::MD5 qw/md5_hex/;
-
-my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
-my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
 
 requires qw/add_connection/;
 
@@ -230,9 +226,14 @@ on whois => sub {
   });
 };
 
-on realname_change => sub {
-  my ($self, $connection, $nick, $realname) = @_;
-  $connection->avatars->{$nick} = realname_avatar($realname);
+on avatar_change => sub {
+  my ($self, $connection, $nick, $avatar) = @_;
+  $connection->avatars->{$nick} = $avatar;
+  for my $window ($self->connection_windows($connection)) {
+    if ($window->previous_nick eq $nick) {
+      $window->previous_nick("");
+    }
+  }
 };
 
 on shutdown => sub {
@@ -240,21 +241,5 @@ on shutdown => sub {
   delete $connection->{reg_guard};
   $self->remove_connection($connection);
 };
-
-sub realname_avatar {
-  my $realname = shift;
-  return () unless $realname;
-
-  if ($realname =~ $email_re) {
-    my $email = $1;
-    return "http://www.gravatar.com/avatar/"
-           . md5_hex($email) . "?s=32&amp;r=x";
-  }
-  elsif ($realname =~ $image_re) {
-    return $1;
-  }
-
-  return ();
-}
 
 1;

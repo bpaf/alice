@@ -5,6 +5,7 @@ use AnyEvent::IRC::Client;
 use AnyEvent::IRC::Util qw/split_prefix parse_irc_msg/;
 use List::Util qw/min first/;
 use List::MoreUtils qw/uniq none any/;
+use Digest::MD5 qw/md5_hex/;
 use Any::Moose;
 use Encode;
 
@@ -66,6 +67,21 @@ has realnames => (
   isa       => 'HashRef',
   default   => sub {{}},
 );
+
+around config => sub {
+  my $orig = shift;
+  my $self = shift;
+
+  if (@_) {
+    my $config = $_[0];
+    $self->$orig($config);
+    my $new = $config->{ircname} ||= "";
+    my $old = $self->{realnames}->{$self->nick} || "";
+    $self->update_realname($new) unless $new eq $old;
+  }
+
+  $self->$orig(@_);
+};
 
 sub id {
   my $self = shift;
@@ -465,7 +481,7 @@ sub irc_352 {
   my $real = join "", @real;
   $real =~ s/^[0-9*] //;
   $self->realnames->{$nick} = $real;
-  $self->event(realname_change => $nick, $real);
+  $self->event(avatar_change => $nick, realname_avatar($real));
 }
 
 sub irc_311 {
@@ -480,7 +496,7 @@ sub irc_311 {
   my ($nick, $user, $address, undef, $real) = @{$msg->{params}};
 
   $self->realnames->{$nick} = $real;
-  $self->event(realname_change => $real);
+  $self->event(avatar_change => $nick, realname_avatar($real));
 
   if (my $whois = $self->whois->{lc $nick}) {
     $whois->{nick} = $nick;
@@ -538,7 +554,7 @@ sub update_realname {
   $self->send_srv(REALNAME => $realname);
 
   $self->realnames->{$self->nick} = $realname;
-  $self->event(realname_change => $realname);
+  $self->event(avatar_change => $self->nick, realname_avatar($realname));
 }
 
 sub is_channel {
@@ -578,6 +594,25 @@ sub split_unicode_string {
 
 sub mk_msg {
   encode "utf8", AnyEvent::IRC::Util::mk_msg(@_);
+}
+
+my $email_re = qr/([^<\s]+@[^\s>]+\.[^\s>]+)/;
+my $image_re = qr/(https?:\/\/\S+(?:jpe?g|png|gif))/i;
+
+sub realname_avatar {
+  my $realname = shift;
+  return () unless $realname;
+
+  if ($realname =~ $email_re) {
+    my $email = $1;
+    return "http://www.gravatar.com/avatar/"
+           . md5_hex($email) . "?s=32&amp;r=x";
+  }
+  elsif ($realname =~ $image_re) {
+    return $1;
+  }
+
+  return ();
 }
 
 __PACKAGE__->meta->make_immutable;
