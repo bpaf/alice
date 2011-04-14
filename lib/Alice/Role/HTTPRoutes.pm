@@ -113,8 +113,10 @@ route "" => sub {
 
   push @queue, sub {
     my $html = $self->render('index_footer', $options, @windows);
-    $self->first_run(0);
-    $self->writeconfig;
+    if ($self->first_run) {
+      $self->first_run(0);
+      $self->writeconfig;
+    }
     return $html;
   };
 
