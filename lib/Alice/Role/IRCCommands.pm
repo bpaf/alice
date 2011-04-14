@@ -4,7 +4,8 @@ use Any::Moose 'Role';
 
 use List::MoreUtils qw/none/;
 use Try::Tiny;
-use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired InvalidArguments/;
+use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired
+                        InvalidArguments UnknownCommand/;
 
 our %COMMANDS;
 my $SRVOPT = qr/\-(\S+)\s*/;
@@ -17,10 +18,15 @@ sub irc_command {
   my ($self, $window, $line) = @_;
   try {
     my ($command, $args) = $self->match_irc_command($line);
-    $self->run_irc_command($window, $command, $args);
+    if ($command) {
+      $self->run_irc_command($window, $command, $args);
+    }
+    else {
+      throw UnknownCommand "$line does not match any known commands. Try /help";
+    }
   }
   catch {
-    $self->send_announcement($window, $_->getMessage);
+    $self->send_announcement($window, "$_");
   }
 }
 
@@ -57,8 +63,7 @@ sub run_irc_command {
       $network = $1;
     }
 
-    throw NetworkRequired "Must specify a network for /$command->{name}"
-      unless $network; 
+    throw NetworkRequired $command->{eg} unless $network; 
 
     my $connection = $self->get_connection($network);
 
@@ -77,7 +82,7 @@ sub run_irc_command {
       $req->{opts} = \@opts;
     }
     else {
-      throw InvalidArguments "Invalid arguments for /$command->{name}";
+      throw InvalidArguments $command->{eg};
     }
   }
 
@@ -93,7 +98,8 @@ command say => {
   name => "say",
   window_type => [qw/channel privmsg/],
   connection => 1,
-  opts => qr{(.*)},
+  eg => "/SAY <msg>",
+  opts => qr{(.+)},
   cb => sub {
     my ($self, $req) = @_;
 
@@ -109,6 +115,7 @@ command say => {
 command msg => {
   name => "msg",
   opts => qr{(\S+)\s*(.*)},
+  eg => "/MSG [-<server name>] <nick> [<msg>]",
   desc => "Sends a message to a nick.",
   connection => 1,
   cb => sub  {
@@ -462,6 +469,8 @@ command invite =>  {
 
 command help => {
   name => 'help',
+  eg => "/HELP [<command>]",
+  desc => "Shows list of commands or overview of a specific command.",
   opts => qr{(\S+)?},
   cb => sub {
     my ($self, $req) = @_;

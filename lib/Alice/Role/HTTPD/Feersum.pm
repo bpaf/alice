@@ -5,6 +5,7 @@ use Any::Moose 'Role';
 use Feersum;
 use Socket qw/SOMAXCONN/;
 use IO::Socket::INET;
+use Class::Throwable qw/SocketFailure/;
 
 with 'Alice::Role::HTTPD';
 
@@ -18,6 +19,7 @@ sub build_httpd {
     Listen => SOMAXCONN,
     Blocking => 0,
   );
+  throw SocketFailure "could not create socket" unless $sock;
   $httpd->use_socket($sock);
 
   return $httpd;
