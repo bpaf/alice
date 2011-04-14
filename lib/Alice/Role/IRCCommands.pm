@@ -170,7 +170,7 @@ command qr{join|j} => {
   cb => sub  {
     my ($self, $req) = @_;
 
-    $self->log(info => "joining ".$req->{opts}[0]);
+    $req->{connection}->log(info => "joining ".$req->{opts}[0]);
     $req->{connection}->send_srv(JOIN => @{$req->{opts}});
   },
 };
