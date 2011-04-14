@@ -396,6 +396,7 @@ sub joined {
 
   if ($is_self) {
     $self->event(self_join => $channel);
+    $self->log(info => "joined $channel");
     # client library only sends WHO if the server doesn't
     # send hostnames with NAMES list (UHNAMES), we to WHO always
     $self->send_srv("WHO" => $channel) if $cl->isupport("UHNAMES");
@@ -410,6 +411,9 @@ sub joined {
 sub part {
   my ($self, $cl, $nick, $channel, $is_self, $msg) = @_;
   $self->event(self_part => $channel) if $is_self;
+  if ($is_self) {
+    $self->log(info => "parted $channel");
+  }
 }
 
 sub multiple_left {
