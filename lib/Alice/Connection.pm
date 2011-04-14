@@ -10,12 +10,6 @@ has avatars => (
   default => sub {{}},
 );
 
-has nick => (
-  is => 'rw',
-  lazy => 1,
-  default => sub {$_[0]->config->{nick}},
-);
-
 has config => (
   is => 'rw',
   isa => 'HashRef',
@@ -26,5 +20,20 @@ sub nick_avatar {
   my ($self, $nick) = @_;
   return $self->avatars->{$nick};
 }
+
+sub log {
+  my ($self, $level, $msg, %options) = @_;
+  $self->event('log' => $level, $msg, %options);
+}
+
+sub id {
+  my $self = shift;
+  return $self->config->{name};
+}
+
+sub nick {
+  my $self = shift;
+  $self->config->{nick}},
+);
 
 1;

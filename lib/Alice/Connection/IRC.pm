@@ -83,11 +83,6 @@ around config => sub {
   $self->$orig(@_);
 };
 
-sub id {
-  my $self = shift;
-  return $self->config->{name};
-}
-
 sub add_whois {
   my ($self, $nick) = @_;
   $nick = lc $nick;
@@ -164,11 +159,6 @@ sub send_long_line {
 sub send_raw {
   my $self = shift;
   $self->cl->send_raw(encode "utf8", $_[0]);
-}
-
-sub log {
-  my ($self, $level, $msg, %options) = @_;
-  $self->event('log' => $level, $msg, %options);
 }
 
 sub log_message {
