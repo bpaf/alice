@@ -355,8 +355,8 @@ command 'connect' => {
 command ignore =>  {
   name => 'ignore',
   opts => qr{(\S+)\s*(\S+)?},
-  eg => "/IGNORE [<type>] <nick>",
-  desc => "Adds nick or channel to ignore list. Types include 'msg', 'part', 'join'. Defaults to 'msg'.",
+  eg => "/IGNORE [<type>] <target>",
+  desc => "Adds a nick or channel to ignore list. Types include 'msg', 'part', 'join'. Defaults to 'msg'.",
   cb => sub  {
     my ($self, $req) = @_;
     
