@@ -7,6 +7,7 @@ use Alice::Window;
 use Alice::InfoWindow;
 use Alice::Connection::IRC;
 
+use Digest::MD5 qw/md5_hex/;
 use IRC::Formatting::HTML qw/html_to_irc/;
 use Encode;
 
@@ -208,9 +209,6 @@ sub add_new_connection {
 sub reload_config {
   my ($self, $new_config) = @_;
 
-  my %prev = map {$_ => $self->servers->{$_}{ircname} || ""}
-             keys %{ $self->servers };
-
   if ($new_config) {
     $self->mergeconfig($new_config);
     $self->writeconfig;
@@ -223,10 +221,6 @@ sub reload_config {
     }
     else {
       my $connection = $self->get_connection($network);
-      $config->{ircname} ||= "";
-      if ($config->{ircname} ne $prev{$network}) {
-        $connection->update_realname($config->{ircname});
-      }
       $connection->config($config);
     }
   }
