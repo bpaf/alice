@@ -4,7 +4,7 @@ use Any::Moose 'Role';
 
 use List::MoreUtils qw/none/;
 use Try::Tiny;
-use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired/;
+use Class::Throwable qw/NetworkRequired InvalidNetwork ChannelRequired InvalidArguments/;
 
 our %COMMANDS;
 my $SRVOPT = qr/\-(\S+)\s*/;
@@ -73,11 +73,12 @@ sub run_irc_command {
 
   # gather any options
   if (my $opt_re = $command->{opts}) {
-    my (@opts) = ($args =~ /$opt_re/);
-    $req->{opts} = \@opts;
-  }
-  else {
-    $req->{opts} = [];
+    if (my (@opts) = ($args =~ /$opt_re/)) {
+      $req->{opts} = \@opts;
+    }
+    else {
+      throw InvalidArguments "Invalid arguments for /$command->{name}";
+    }
   }
 
   $command->{cb}->($self, $req);
@@ -135,10 +136,9 @@ command nick => {
   cb => sub {
     my ($self, $req) = @_;
 
-    if (my $nick = $req->{opts}[0]) {
-      $req->{connection}->log(info => "now known as $nick");
-      $req->{connection}->send_srv(NICK => $nick);
-    }
+    my $nick = $req->{opts}[0];
+    $req->{connection}->log(info => "now known as $nick");
+    $req->{connection}->send_srv(NICK => $nick);
   }
 };
 
@@ -175,10 +175,10 @@ command create => {
   cb => sub  {
     my ($self, $req) = @_;
 
-    if (my $name = $req->{opts}[0]) {
-      my $new_window = $self->find_or_create_window($name, $req->{connection});
-      $self->broadcast($new_window->join_action);
-    }
+    my $name = $req->{opts}[0];
+
+    my $new_window = $self->find_or_create_window($name, $req->{connection});
+    $self->broadcast($new_window->join_action);
   }
 };
 
@@ -245,9 +245,8 @@ command whois =>  {
   cb => sub  {
     my ($self, $req) = @_;
 
-    if (my $nick = $req->{opts}[0]) {
-      $req->{connection}->add_whois($nick);
-    }
+    my $nick = $req->{opts}[0];
+    $req->{connection}->add_whois($nick);
   },
 };
 
@@ -262,14 +261,12 @@ command me =>  {
     my ($self, $req) = @_;
     my $action = $req->{opts}[0];
 
-    if ($action) {
-      my $window = $req->{window};
-      my $connection = $req->{connection};
+    my $window = $req->{window};
+    my $connection = $req->{connection};
 
-      $self->send_message($window, $connection->nick, "\x{2022} $action");
-      $action = AnyEvent::IRC::Util::encode_ctcp(["ACTION", $action]);
-      $connection->send_srv(PRIVMSG => $window->title, $action);
-    }
+    $self->send_message($window, $connection->nick, "\x{2022} $action");
+    $action = AnyEvent::IRC::Util::encode_ctcp(["ACTION", $action]);
+    $connection->send_srv(PRIVMSG => $window->title, $action);
   },
 };
 
@@ -282,9 +279,8 @@ command quote => {
   cb => sub  {
     my ($self, $req) = @_;
 
-    if (my $command = $req->{opts}[0]) {
-      $req->{connection}->send_raw($command);
-    }
+    my $command = $req->{opts}[0];
+    $req->{connection}->send_raw($command);
   },
 };
 
@@ -351,33 +347,41 @@ command 'connect' => {
 
 command ignore =>  {
   name => 'ignore',
-  opts => qr{(\S+)},
-  eg => "/IGNORE <nick>",
-  desc => "Adds nick to ignore list.",
+  opts => qr{(\S+)\s*(\S+)?},
+  eg => "/IGNORE [<type>] <nick>",
+  desc => "Adds nick or channel to ignore list. Types include 'msg', 'part', 'join'. Defaults to 'msg'.",
   cb => sub  {
     my ($self, $req) = @_;
     
-    if (my $nick = $req->{opts}[0]) {
-      my $window = $req->{window};
-      $self->add_ignore($nick);
-      $self->send_announcement($window, "Ignoring $nick");
+    if (!$req->{opts}[1]) {
+      unshift @{$req->{opts}}, "msg";
     }
+
+    my ($type, $nick) = @{$req->{opts}};
+
+    my $window = $req->{window};
+    $self->add_ignore($type, $nick);
+    $self->send_announcement($window, "Ignoring $type from $nick");
   },
 };
 
 command unignore =>  {
   name => 'unignore',
-  opts => qr{(\S+)},
-  eg => "/UNIGNORE <nick>",
-  desc => "Removes nick from ignore list.",
+  opts => qr{(\S+)\s*(\S+)?},
+  eg => "/UNIGNORE [<type>] <nick>",
+  desc => "Removes nick from ignore list. Types include 'msg', 'part', 'join'. Defaults to 'msg'.",
   cb => sub {
     my ($self, $req) = @_;
     
-    if (my $nick = $req->{opts}[0]) {
-      my $window = $req->{window};
-      $self->remove_ignore($nick);
-      $self->send_announcement($window, "No longer ignoring $nick");
+    if (!$req->{opts}[1]) {
+      unshift @{$req->{opts}}, "msg";
     }
+
+    my ($type, $nick) = @{$req->{opts}};
+
+    my $window = $req->{window};
+    $self->remove_ignore($type, $nick);
+    $self->send_announcement($window, "No longer ignoring $nick");
   },
 };
 
@@ -388,11 +392,16 @@ command ignores => {
   cb => sub {
     my ($self, $req) = @_;
 
-    my $msg = join ", ", $self->ignores;
-    $msg = "none" unless $msg;
+    my $msg;
+
+    for my $type(qw/msg part join/) {
+      $msg .= "$type: ";
+      $msg .= (join ", ", $self->ignores($type)) || "none";
+      $msg .= "\n";
+    }
 
     my $window = $req->{window};
-    $self->send_announcement($window, "Ignoring:\n$msg");
+    $self->send_announcement($window, "Ignoring\n$msg");
   },
 };
 
@@ -404,13 +413,12 @@ command qr{window|w} =>  {
   cb => sub  {
     my ($self, $req) = @_;
     
-    if (my $window_number = $req->{opts}[0]) {
-      $self->broadcast({
-        type => "action",
-        event => "focus",
-        window_number => $window_number,
-      });
-    }
+    my $window_number = $req->{opts}[0];
+    $self->broadcast({
+      type => "action",
+      event => "focus",
+      window_number => $window_number,
+    });
   }
 };
 
@@ -445,15 +453,10 @@ command invite =>  {
     my ($self, $req) = @_;
 
     my ($nick, $channel) = @{ $req->{opts} };
-    my $window = $req->{opts};
+    my $window = $req->{window};
 
-    if ($nick and $channel){
-      $self->send_announcement($window, "Inviting $nick to $channel");
-      $req->{connection}->send_srv(INVITE => $nick, $channel);   
-    }
-    else {
-      $self->send_announcement($window, "Please specify both a nickname and a channel.");
-    }
+    $self->send_announcement($window, "Inviting $nick to $channel");
+    $req->{connection}->send_srv(INVITE => $nick, $channel);   
   },
 };
 

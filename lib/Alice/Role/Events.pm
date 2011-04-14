@@ -44,7 +44,7 @@ on 'log' => sub {
 on privatemsg => sub {
   my ($self, $connection, $nick, $text) = @_;
 
-  return if $self->is_ignore($nick);
+  return if $self->is_ignore(msg => $nick);
 
   if (my $window = $self->find_or_create_window($nick, $connection)) {
     $self->send_message($window, $nick, $text); 
@@ -54,7 +54,7 @@ on privatemsg => sub {
 on publicmsg => sub {
   my ($self, $connection, $channel, $nick, $text) = @_;
 
-  return if $self->is_ignore($nick);
+  return if $self->is_ignore(msg => $nick);
 
   if (my $window = $self->find_window($channel, $connection)) {
     $self->send_message($window, $nick, $text); 
@@ -64,7 +64,7 @@ on publicmsg => sub {
 on ctcp_action => sub {
   my ($self, $connection, $channel, $nick, $text) = @_;
 
-  return if $self->app->is_ignore($nick);
+  return if $self->app->is_ignore(msg => $nick);
 
   if (my $window = $self->find_window($channel, $connection)) {
     $self->send_message($window, $nick, "\x{2022} $text");
@@ -115,6 +115,8 @@ on self_join => sub {
 on 'join' => sub {
   my ($self, $connection, $nick, $channel) = @_;
 
+  return if $self->is_ignore("join" => $channel);
+
   if (my $window = $self->find_window($channel, $connection)) {
     $self->send_event($window, "joined", $nick);
   }
@@ -130,6 +132,8 @@ on self_part => sub {
 
 on part => sub {
   my ($self, $connection, $channel, $reason,  @nicks) = @_;
+
+  return if $self->is_ignore(part => $channel);
 
   if (my $window = $self->find_window($channel, $connection)) {
     $self->broadcast(map {$window->format_event("left", $_, $reason)} @nicks);

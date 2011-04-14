@@ -70,10 +70,18 @@ has tabsets => (
   default => sub {{}},
 );
 
-has [qw/ignore highlights order monospace_nicks/]=> (
+has [qw/highlights order monospace_nicks/]=> (
   is      => 'rw',
   isa     => 'ArrayRef[Str]',
   default => sub {[]},
+);
+
+has ignore => (
+  is      => 'rw',
+  isa     => 'HashRef[ArrayRef]',
+  default => sub {
+    +{ msg => [], 'join' => [], part => [] }
+  }
 );
 
 has servers => (
@@ -136,6 +144,12 @@ sub loadconfig {
     my $body;
     aio_load $self->configfile, $body, sub {
       $config = eval $body;
+
+      # upgrade ignore to new format
+      if ($config->{ignore} and ref $config->{ignore} eq "ARRAY") {
+        $config->{ignore} = {msg => $config->{ignore}};
+      }
+
       if ($@) {
         warn "error loading config: $@\n";
       }
@@ -271,22 +285,27 @@ sub is_monospace_nick {
   any {$_ eq $nick} @{$self->monospace_nicks};
 }
 
-sub ignores {@{$_[0]->ignore}}
+sub ignores {
+  my ($self, $type) = @_;
+  $type ||= "msg";
+  @{$self->ignore->{$type} || []}
+}
 
 sub is_ignore {
-  my ($self, $nick) = @_;
-  any {$_ eq $nick} $self->ignores;
+  my ($self, $type, $nick) = @_;
+  $type ||= "msg";
+  any {$_ eq $nick} $self->ignores($type);
 }
 
 sub add_ignore {
-  my ($self, $nick) = @_;
-  push @{$self->ignore}, $nick;
+  my ($self, $type, $nick) = @_;
+  push @{$self->ignore->{$type}}, $nick;
   $self->writeconfig;
 }
 
 sub remove_ignore {
-  my ($self, $nick) = @_;
-  $self->ignore([ grep {$nick ne $_} $self->ignores ]);
+  my ($self, $type, $nick) = @_;
+  $self->ignore->{$type} = [ grep {$nick ne $_} $self->ignores($type) ];
   $self->writeconfig;
 }
 
