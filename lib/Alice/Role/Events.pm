@@ -109,6 +109,7 @@ on self_join => sub {
       $self->broadcast($window->connect_action);
     }
     $self->broadcast($window->join_action);
+    $self->send_event($window, "joined", "You");
   }
 };
 
