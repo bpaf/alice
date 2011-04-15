@@ -6,7 +6,7 @@ sub log {
   my ($self, $level, $message, %options) = @_;
 
   if ($level eq "info") {
-    my $from = delete $options{network} || "config";
+    my $from = delete $options{from} || "config";
     my $line = $self->info_window->format_message($from, $message, %options);
     $self->broadcast($line);
   }

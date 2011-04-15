@@ -33,7 +33,7 @@ sub on ($&) {
 
 on 'log' => sub {
   my ($self, $connection, $level, $message, %options) = @_;
-  $options{network} = $connection->id;
+  $options{from} = $connection->id;
   $self->log($level, $message, %options);
 };
 

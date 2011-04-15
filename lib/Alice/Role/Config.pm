@@ -157,7 +157,7 @@ sub loadconfig {
     }
   }
   else {
-    say STDERR "No config found, writing a few config to ".$self->configfile;
+    warn "No config found, writing a few config to ".$self->configfile."\n";
     $self->writeconfig($loaded);
   }
 }
@@ -214,7 +214,7 @@ sub mergeconfig {
       $self->$key($config->{$key}) if $attr->{is} eq "rw";
     }
     else {
-      say STDERR "$key is not a valid config option";
+      warn "$key is not a valid config option\n";
     }
   }
 }
@@ -242,7 +242,6 @@ sub writeconfig {
 sub serialized {
   my $self = shift;
   my $meta = __PACKAGE__->meta;
-      use Data::Dumper;
   return {
     map  {$_ => $self->$_}
     grep {$meta->get_attribute($_)->{is} eq "rw"}
