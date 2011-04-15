@@ -144,8 +144,10 @@ command nick => {
     my ($self, $req) = @_;
 
     my $nick = $req->{opts}[0];
-    $req->{connection}->log(info => "now known as $nick");
-    $req->{connection}->send_srv(NICK => $nick);
+    my $connection = $req->{connection};
+
+    $self->log(info => "now known as $nick", from => $connection->id);
+    $connection->send_srv(NICK => $nick);
   }
 };
 
@@ -170,8 +172,10 @@ command qr{join|j} => {
   cb => sub  {
     my ($self, $req) = @_;
 
-    $req->{connection}->log(info => "joining ".$req->{opts}[0]);
-    $req->{connection}->send_srv(JOIN => @{$req->{opts}});
+    my $connection = $req->{connection};
+
+    $self->log(info => "joining ".$req->{opts}[0], from => $connection->id);
+    $connection->send_srv(JOIN => @{$req->{opts}});
   },
 };
 
@@ -309,7 +313,7 @@ command disconnect => {
       }
       elsif ($connection->reconnect_timer) {
         $connection->cancel_reconnect;
-        $connection->log(info => "Canceled reconnect timer");
+        $self->log(info => "Canceled reconnect timer", from => $connection->id);
       }
       else {
         $self->send_announcement($window, "Already disconnected");
@@ -339,7 +343,7 @@ command 'connect' => {
       }
       elsif ($connection->reconnect_timer) {
         $connection->cancel_reconnect;
-        $connection->log(info => "Canceled reconnect timer");
+        $self->log(info => "Canceled reconnect timer", from => $connection->id);
         $connection->connect;
       }
       else {
@@ -465,6 +469,23 @@ command invite =>  {
     $self->send_announcement($window, "Inviting $nick to $channel");
     $req->{connection}->send_srv(INVITE => $nick, $channel);   
   },
+};
+
+command qr{avatar|realname} => {
+  name => 'avatar',
+  eg => "/AVATAR [-<network>] <image-url>",
+  connection => 1,
+  desc => "Changes your avatar. Requires a reconnect on most servers.",
+  opts => qr{(\S+)},
+  cb => sub {
+    my ($self, $req) = @_;
+
+    my $url = $req->{opts}[0];
+    my $connection = $req->{connection};
+
+    $connection->update_realname($url);
+    $self->send_announcement($req->{window}, "realname changed to $url");
+  }
 };
 
 command help => {
