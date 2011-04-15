@@ -60,7 +60,7 @@ on publicmsg => sub {
 on ctcp_action => sub {
   my ($self, $connection, $channel, $nick, $text) = @_;
 
-  return if $self->app->is_ignore(msg => $nick);
+  return if $self->is_ignore(msg => $nick);
 
   if (my $window = $self->find_window($channel, $connection)) {
     $self->send_message($window, $nick, "\x{2022} $text");
