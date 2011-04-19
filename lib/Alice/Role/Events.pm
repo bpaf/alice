@@ -82,7 +82,7 @@ on nick_change => sub {
   my @windows = map {$self->find_window($_, $connection)} @channels;
 
   $self->broadcast(
-    map {$_->format_event("nick", $old_nick, $new_nick)} @windows
+    map {$_->format_event("$old_nick is now known as $new_nick")} @windows
   );
 };
 
@@ -105,7 +105,7 @@ on self_join => sub {
       $self->broadcast($window->connect_action);
     }
     $self->broadcast($window->join_action);
-    $self->send_event($window, "joined", "You");
+    $self->send_event($window, "You joined the chat room.");
   }
 };
 
@@ -115,7 +115,7 @@ on 'join' => sub {
   return if $self->is_ignore("join" => $channel);
 
   if (my $window = $self->find_window($channel, $connection)) {
-    $self->send_event($window, "joined", $nick);
+    $self->send_event($window, "$nick joined the chat room.");
   }
 };
 
@@ -132,8 +132,10 @@ on part => sub {
 
   return if $self->is_ignore(part => $channel);
 
+  $reason = ($reason ? " ($reason)" : "");
+
   if (my $window = $self->find_window($channel, $connection)) {
-    $self->broadcast(map {$window->format_event("left", $_, $reason)} @nicks);
+    $self->broadcast(map {$window->format_event("$_ left the chat room.$reason")} @nicks);
   }
 };
 
@@ -147,7 +149,7 @@ on topic => sub {
     }
     $topic = irc_to_html($topic, classes => 1, invert => "italic");
     $window->topic({string => $topic, author => $nick, time => time});
-    $self->send_event($window, "topic", $nick, $topic);
+    $self->send_event($window, "Topic changed to \"$topic\" by $nick.");
   }
 };
 
@@ -157,7 +159,7 @@ on disconnect => sub {
   my @windows = $self->connection_windows($connection);
 
   $_->disabled(1) for @windows;
-  my @events = map {$_->format_event("disconnect", "You", $_->network)} @windows;
+  my @events = map {$_->format_event("You have been disconnected from ".$_->network)} @windows;
 
   $self->broadcast(
     @events,
@@ -174,7 +176,7 @@ on 'connect' => sub {
   my ($self, $connection, $reason) = @_;
 
   my @windows = $self->connection_windows($connection);
-  my @events = map {$_->format_event("reconnect", "You", $_->network)} @windows;
+  my @events = map {$_->format_event("You have been reconnected to".$_->network)} @windows;
 
   $self->broadcast(
     @events,

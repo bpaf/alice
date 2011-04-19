@@ -18,6 +18,7 @@ with 'Alice::Role::Events';
 with 'Alice::Role::HTTPRoutes';
 with 'Alice::Role::IRCCommands';
 with 'Alice::Role::Log';
+with 'Alice::Role::History';
 
 our $VERSION = '0.19';
 
@@ -240,10 +241,12 @@ sub send_announcement {
 }
 
 sub send_event {
-  my ($self, $window, $event, $nick, $body) = @_;
+  my ($self, $window, $body) = @_;
 
-  my $message = $window->format_event($event, $nick, $body);
+  my $message = $window->format_event($body);
   $self->broadcast($message);
+
+  $self->remember_event($window, $body);
 }
 
 sub send_message {
@@ -259,6 +262,8 @@ sub send_message {
 
   my $message = $window->format_message($nick, $body, %options);
   $self->broadcast($message);
+
+  $self->remember_message($window, $nick, $body);
 }
 
 sub broadcast {

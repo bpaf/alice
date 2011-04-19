@@ -153,11 +153,10 @@ sub clear_action {
 }
 
 sub format_event {
-  my ($self, $event, $nick, $body) = @_;
+  my ($self, $body) = @_;
   my $message = {
     type      => "message",
-    event     => $event,
-    nick      => $nick,
+    event     => "event",
     window    => $self->serialized,
     body      => $body,
     msgid     => $self->next_msgid,

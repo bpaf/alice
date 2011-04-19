@@ -242,7 +242,8 @@ command qr{topic|t} => {
     }
     else {
       my $topic = $window->topic;
-      $self->send_event($window, "topic", $topic->{author}, $topic->{string});
+      my $body = "Topic \"$topic->{string}\"" . ($topic->{author} ? " by $topic->{author}." : ""); 
+      $self->send_event($window, $body);
     }
   }
 };

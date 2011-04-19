@@ -17,4 +17,12 @@ has configdir => (
   default => "$ENV{HOME}/.alice",
 );
 
+has logdir => (
+  is => 'ro',
+  lazy => 1,
+  default => sub {
+    $_[0]->configdir."/logs";
+  } 
+);
+
 1;
