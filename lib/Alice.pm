@@ -34,6 +34,15 @@ has cv => (
   default  => sub {AE::cv},
 );
 
+has message_store => (
+  is      => 'ro',
+  default => sub{
+    eval "use Alice::MessageStore::Memory;";
+    die $@ if $@;
+    Alice::MessageStore::Memory->new
+  },
+);
+
 sub connections {values %{$_[0]->_connections}}
 sub add_connection {$_[0]->_connections->{$_[1]->id} = $_[1]}
 sub has_connection {$_[0]->get_connection($_[1])}
@@ -71,7 +80,10 @@ has 'info_window' => (
   default => sub {
     my $self = shift;
     my $id = $self->_build_window_id("info", "info");
-    my $info = Alice::InfoWindow->new(id => $id);
+    my $info = Alice::InfoWindow->new(
+      id => $id,
+      message_store => $self->message_store
+    );
     return $info;
   }
 );
@@ -163,6 +175,7 @@ sub create_window {
     title    => $title,
     network  => $connection->id,
     id       => $id,
+    message_store => $self->message_store,
   );
   $self->add_window($window);
   return $window;

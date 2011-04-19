@@ -8,7 +8,6 @@ use IRC::Formatting::HTML qw/irc_to_html/;
 use Encode;
 
 with 'Alice::Role::Template';
-with 'Alice::Role::MessageBuffer';
 
 my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
 
@@ -47,6 +46,16 @@ has nicks => (
 has network => (
   is => 'ro',
   required => 1
+);
+
+has message_store => (
+  is => 'ro',
+  required => 1,
+);
+
+has previous_nick => (
+  is => 'rw',
+  default => "",
 );
 
 sub sort_name {
@@ -264,6 +273,44 @@ sub hashtag {
   my $path = $self->type eq "privmsg" ? "users" : "channels";
   
   return "/" . $self->network . "/$path/" . $name;
+}
+
+sub msgid {
+  my $self = shift;
+  return $self->message_store->msgid;
+}
+
+sub next_msgid {
+  my $self = shift;
+  $self->message_store->next_msgid;
+}
+
+sub clear {
+  my $self = shift;
+  $self->previous_nick("");
+  $self->message_store->clear($self->id);
+}
+
+sub add_message {
+  my ($self, $message) = @_;
+  $message->{event} eq "say" ? $self->previous_nick($message->{nick})
+                             : $self->previous_nick("");
+
+  $self->message_store->add_message($self->id, $message);
+}
+
+sub messages {
+  my ($self, $limit, $min, $cb) = @_;
+
+  my $msgid = $self->message_store->msgid;
+
+  $min = 0 unless $min > 0;
+  $min = $msgid if $min > $msgid;
+
+  $limit = $msgid - $min if $min + $limit > $msgid;
+  $limit = 0 if $limit < 0;
+
+  return $self->message_store->messages($self->id, $limit, $min, $cb);
 }
 
 __PACKAGE__->meta->make_immutable;
