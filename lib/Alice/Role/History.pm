@@ -12,6 +12,11 @@ has buffers => (
   default => sub {{}},
 );
 
+has fhs => (
+  is => 'rw',
+  default => sub {{}},
+);
+
 has timers => (
   is => 'rw',
   default => sub {{}},
@@ -20,27 +25,36 @@ has timers => (
 sub remember_message {
   my ($self, $window, $nick, $body) = @_;
   
-  my ($sec, $min, $hour, $day, $mon, $year) = localtime(time);
-  $year += 1900;
+  my ($dir, $file) = $self->logfile($window);
+  my $line = $self->timestamp." <$nick> $body";
 
-  my $dir = $self->logdir."/".$window->network."/".$window->title."/$year/";
-  my $file = "$mon-$day.txt";
-
-  my $line = "$hour:$min <$nick> $body";
   $self->_add_line($dir, $file, $line);
 }
 
 sub remember_event {
   my ($self, $window, $body) = @_;
 
+  my ($dir, $file) = $self->logfile($window);
+  my $line = $self->timestamp." -!- $body";
+
+  $self->_add_line($dir, $file, $line);
+}
+
+sub timestamp {
+  my ($sec, $min, $hour) = localtime(time);
+  my $time = sprintf("%02d:%02d", $hour, $min);
+}
+
+sub logfile {
+  my ($self, $window) = @_;
+
   my ($sec, $min, $hour, $day, $mon, $year) = localtime(time);
   $year += 1900;
 
   my $dir = $self->logdir."/".$window->network."/".$window->title."/$year/";
-  my $file = "$mon-$day.txt";
+  my $file = sprintf("%s-%04d-%02d-%02d.txt", $window->title, $year, $mon, $day);
 
-  my $line = "$hour:$min $body";
-  $self->_add_line($dir, $file, $line);
+  return ($dir, $file);
 }
 
 sub _add_line {
@@ -62,17 +76,31 @@ sub _add_line {
 sub _write_buffer {
   my ($self, $file) = @_;
   my $output = delete $self->buffers->{$file};
-  aio_open $file, POSIX::O_CREAT | POSIX::O_WRONLY | POSIX::O_APPEND, 0644, sub {
-    my $fh = shift;
-    if ($fh) {
-      for my $line (@$output) {
-        $line .= "\n";
-        aio_write $fh, undef, length $line, $line, 0, sub {};
+
+  if (my $fh = $self->fhs->{$file}) {
+    $self->_write($fh, $output);
+  }
+  else {
+    aio_open $file, POSIX::O_CREAT | POSIX::O_WRONLY | POSIX::O_APPEND, 0644, sub {
+      my $fh = shift;
+      if ($fh) {
+        $self->fhs->{$file} = $fh;
+        unshift @$output, "-- Log opened ".localtime;
+        $self->_write($fh, $output);
+      }
+      else {
+        warn "$!\n";
       }
     }
-    else {
-      warn $!;
-    }
+  }
+}
+
+sub _write {
+  my ($self, $fh, $output) = @_;
+
+  for my $line (@$output) {
+    $line .= "\n";
+    aio_write $fh, undef, length $line, $line, 0, sub {};
   }
 }
 
