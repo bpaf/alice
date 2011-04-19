@@ -223,6 +223,7 @@ sub writeconfig {
   my $self = shift;
   my $callback = pop;
   mkdir $self->configdir if !-d $self->configdir;
+  $self->log(debug => "writing config");
   aio_open $self->configfile, POSIX::O_CREAT | POSIX::O_WRONLY | POSIX::O_TRUNC, 0644, sub {
     my $fh = shift;
     if ($fh) {
@@ -230,6 +231,7 @@ sub writeconfig {
       local $Data::Dumper::Indent = 1;
       my $config = Dumper $self->serialized;
       aio_write $fh, 0, length $config, $config, 0, sub {
+        $self->log(debug => "done writing config");
         $callback->() if $callback;
       };
     }
@@ -319,5 +321,11 @@ sub tabset_includes {
     return any {$_ eq $window_id} @$windows;
   }
 }
+
+before shutdown => sub {
+  my $self = shift;
+  $self->cv->begin;
+  $self->writeconfig(sub{$self->cv->end});
+};
 
 1;

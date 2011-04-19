@@ -28,6 +28,12 @@ has _connections => (
   default => sub {{}},
 );
 
+has cv => (
+  is       => 'rw',
+  isa      => 'AnyEvent::CondVar',
+  default  => sub {AE::cv},
+);
+
 sub connections {values %{$_[0]->_connections}}
 sub add_connection {$_[0]->_connections->{$_[1]->id} = $_[1]}
 sub has_connection {$_[0]->get_connection($_[1])}

@@ -96,12 +96,24 @@ sub _write_buffer {
 }
 
 sub _write {
-  my ($self, $fh, $output) = @_;
+  my ($self, $fh, $output, $cb) = @_;
+
+  $cb ||= sub {};
 
   for my $line (@$output) {
     $line .= "\n";
-    aio_write $fh, undef, length $line, $line, 0, sub {};
+    aio_write $fh, undef, length $line, $line, 0, $cb;
   }
 }
+
+before shutdown => sub {
+  my $self = shift;
+
+  for my $file (keys %{$self->fhs}) {
+    my $fh = delete $self->fhs->{$file};
+    $self->cv->begin;
+    $self->_write($fh, ["-- Log closed ".localtime], sub {$self->cv->end});
+  }
+};
 
 1;

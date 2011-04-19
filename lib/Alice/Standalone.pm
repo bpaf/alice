@@ -5,11 +5,6 @@ use AnyEvent;
 
 extends 'Alice';
 
-has cv => (
-  is       => 'rw',
-  isa      => 'AnyEvent::CondVar'
-);
-
 with 'Alice::Role::HTTPD';
 
 after run => sub {
@@ -17,7 +12,7 @@ after run => sub {
 
   my @sigs = map {AE::signal $_, sub {$self->init_shutdown}} qw/INT QUIT/;
 
-  $self->cv(AE::cv);
+  $self->cv->begin;
   $self->cv->recv;
 };
 
@@ -34,7 +29,7 @@ before init_shutdown => sub {
 
 after shutdown => sub {
   my $self = shift;
-  $self->cv->send;
+  $self->cv->end;
 };
 
 1;
