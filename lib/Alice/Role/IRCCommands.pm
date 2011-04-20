@@ -241,9 +241,7 @@ command qr{topic|t} => {
       $connection->send_srv(TOPIC => $window->title, $new_topic);
     }
     else {
-      my $topic = $window->topic;
-      my $body = "Topic \"$topic->{string}\"" . ($topic->{author} ? " by $topic->{author}." : ""); 
-      $self->send_event($window, $body);
+      $self->send_topic($window);
     }
   }
 };

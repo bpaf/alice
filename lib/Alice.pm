@@ -18,7 +18,6 @@ with 'Alice::Role::Events';
 with 'Alice::Role::HTTPRoutes';
 with 'Alice::Role::IRCCommands';
 with 'Alice::Role::Log';
-with 'Alice::Role::History';
 
 our $VERSION = '0.19';
 
@@ -133,6 +132,7 @@ sub init_shutdown {
 sub shutdown {
   my $self = shift;
   $_->close for @{$self->streams};
+  $_->close($self->cv) for $self->windows;
 }
 
 sub tab_order {
@@ -216,6 +216,7 @@ sub close_window {
   $self->log(debug => "sending a request to close a tab: " . $window->title)
     if $self->stream_count;
   $self->remove_window($window->id) if $window->type ne "info";
+  $window->close_logs;
 }
 
 sub add_new_connection {
@@ -259,13 +260,19 @@ sub send_announcement {
   $self->broadcast($message);
 }
 
+# special because we need to allow html in part of the body
+sub send_topic {
+  my ($self, $window) = @_;
+
+  my $message = $window->format_topic;
+  $self->broadcast($message);
+}
+
 sub send_event {
   my ($self, $window, $body) = @_;
 
   my $message = $window->format_event($body);
   $self->broadcast($message);
-
-  $self->remember_event($window, $body);
 }
 
 sub send_message {
@@ -281,8 +288,6 @@ sub send_message {
 
   my $message = $window->format_message($nick, $body, %options);
   $self->broadcast($message);
-
-  $self->remember_message($window, $nick, $body);
 }
 
 sub broadcast {

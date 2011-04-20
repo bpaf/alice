@@ -8,6 +8,7 @@ use IRC::Formatting::HTML qw/irc_to_html/;
 use Encode;
 
 with 'Alice::Role::Template';
+with 'Alice::Role::History';
 
 my $url_regex = qr/\b(https?:\/\/(?:[^\s()<>]+|\(([^\s()<>]+|(\([^\s()<>]+\)))*\))+(?:\(([^\s()<>]+|(\([^\s()<>]+\)))*\)|[^\s`!()\[\]{};:'".,<>?«»“”‘’]))/i;
 
@@ -21,7 +22,7 @@ has topic => (
   is      => 'rw',
   isa     => 'HashRef[Str|Undef]',
   default => sub {{
-    string => 'no topic set',
+    string => '',
     author => '',
     time   => time,
   }}
@@ -85,9 +86,19 @@ sub is_channel {$_[0]->type eq "channel"}
 sub topic_string {
   my $self = shift;
   if ($self->is_channel) {
-    return $self->topic->{string} || $self->title . ": no topic set";
+    return $self->topic->{string} || "no topic set";
   }
   return $self->title;
+}
+
+sub set_topic {
+  my ($self, $body, $nick) = @_;
+
+  $self->topic({
+    string => $body || "",
+    author => $nick || "",
+    'time' => time,
+  });
 }
 
 sub serialized {
@@ -164,8 +175,7 @@ sub clear_action {
 sub format_event {
   my ($self, $body) = @_;
   my $message = {
-    type      => "message",
-    event     => "event",
+    type      => "event",
     window    => $self->serialized,
     body      => $body,
     msgid     => $self->next_msgid,
@@ -177,6 +187,32 @@ sub format_event {
   $message->{html} = $html;
 
   $self->add_message($message);
+  $self->log_event($body);
+
+  return $message;
+}
+
+sub format_topic {
+  my $self = shift;
+
+  my $message = {
+    type      => "event",
+    window    => $self->serialized,
+    msgid     => $self->next_msgid,
+    body      => irc_to_html($self->topic_string),
+    nick      => $self->topic->{author} || "",
+    timestamp => time,
+    nicks     => $self->all_nicks,
+  };
+
+  my $html = $self->render("topic", $message);
+  $message->{html} = $html;
+
+  $self->add_message($message);
+
+  $self->log_event("Topic changed to \"".$self->topic_string
+                  .($self->topic->{author} ? "\" by ".$self->topic->{author} : ""));
+
   return $message;
 }
 
@@ -188,7 +224,6 @@ sub format_message {
 
   my $message = {
     type      => "message",
-    event     => "say",
     nick      => $nick,
     avatar    => $opts{avatar} || "",
     window    => $self->serialized,
@@ -201,6 +236,7 @@ sub format_message {
 
   $message->{html} = $self->render("message", $message, encoded_string($html));
   $self->add_message($message);
+  $self->log_message($nick, $body);
 
   return $message;
 }
@@ -293,8 +329,8 @@ sub clear {
 
 sub add_message {
   my ($self, $message) = @_;
-  $message->{event} eq "say" ? $self->previous_nick($message->{nick})
-                             : $self->previous_nick("");
+  $message->{type} eq "message" ? $self->previous_nick($message->{nick})
+                                : $self->previous_nick("");
 
   $self->message_store->add_message($self->id, $message);
 }
@@ -311,6 +347,10 @@ sub messages {
   $limit = 0 if $limit < 0;
 
   return $self->message_store->messages($self->id, $limit, $min, $cb);
+}
+
+sub close {
+  my ($self, $cv) = @_;
 }
 
 __PACKAGE__->meta->make_immutable;

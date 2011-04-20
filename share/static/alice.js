@@ -11189,7 +11189,7 @@ Alice.Connection = {
       for (var i=0; i<length; i++) {
         if (queue[i].type == "action")
           this.application.handleAction(queue[i]);
-        else if (queue[i].type == "message") {
+        else if (queue[i].type == "message" || queue[i].type == "event") {
           if (queue[i].timestamp)
             queue[i].timestamp = Alice.epochToLocal(queue[i].timestamp, this.application.options.timeformat);
           this.application.displayMessage(queue[i]);

@@ -147,9 +147,8 @@ on topic => sub {
       $window->disabled(0);
       $self->broadcast($window->connect_action);
     }
-    $topic = irc_to_html($topic, classes => 1, invert => "italic");
-    $window->topic({string => $topic, author => $nick, time => time});
-    $self->send_event($window, "Topic changed to \"$topic\" by $nick.");
+    $window->set_topic($topic, $nick);
+    $self->send_topic($window);
   }
 };
 
