@@ -75,6 +75,7 @@ sub add_line {
 sub _write_buffer {
   my ($self, $file) = @_;
 
+  delete $file->{timer};
   my $lines = delete $file->{lines};
   $file->{lines} = [];
 
@@ -117,14 +118,12 @@ sub close_log {
 }
 
 around 'close' => sub {
-  my $orig = shift;
-  my $self = shift;
-  my ($cv ) = @_;
+  my ($orig, $self, $cv) = @_;
 
   $cv->begin;
   $self->close_log(sub {$cv->end});
 
-  $self->$orig(@_);
+  $self->$orig($cv);
 };
 
 1;
