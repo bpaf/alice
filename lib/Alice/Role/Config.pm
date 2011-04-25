@@ -267,8 +267,8 @@ sub authenticate {
   my $success = 1;
 
   if ($self->auth_enabled) {
-    my $success = ($self->auth->{user} eq $user
-                  and $self->auth->{pass} eq $pass);
+    $success = ($self->auth->{user} eq $user
+               and $self->auth->{pass} eq $pass);
   }
 
   $cb->($success);

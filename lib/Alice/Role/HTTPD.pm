@@ -54,13 +54,49 @@ sub dispatch {
   my $res = $req->new_response(200);
 
   if ($self->auth_enabled) {
-    unless ($req->path eq "/login" or $self->is_logged_in($req)) {
+    if ($req->path eq "/login") {
+      $self->handle_login($req, $res);
+      return;
+    }
+    elsif (!$self->is_logged_in($req)) {
       $self->auth_failed($req, $res);
       return;
     }
   }
 
   return $self->http_request($req, $res);
+}
+
+sub handle_login {
+  my ($self, $req, $res) = @_;
+
+  my $user = $req->param("username") || "";
+  my $pass = $req->param("password") || "";
+
+  if ($req->method eq "POST") {
+    $self->authenticate($user, $pass, sub {
+      my $success = shift;
+      if ($success) {
+        $req->env->{"psgix.session"} = {
+          is_logged_in => 1, 
+          username     => $user,
+          userid       => $self->user,
+        };
+
+        my $dest = $req->param("dest") || "/";
+        $res->redirect($dest);
+        $res->send;
+      }
+      else {
+        $req->env->{"psgix.session"}{is_logged_in} = 0;
+        $req->env->{"psgix.session.options"}{expire} = 1;
+        $self->http_request($req, $res);
+      }
+    });
+  }
+  else {
+    $self->http_request($req, $res);
+  }
 }
 
 sub auth_failed {

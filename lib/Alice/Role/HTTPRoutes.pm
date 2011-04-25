@@ -229,40 +229,14 @@ route login => sub {
 
   my $dest = $req->param("dest") || "/";
 
-  # no auth is required
-  if (!$self->auth_enabled) {
-    $res->redirect($dest);
-    $res->send;
+  # if a post made it here auth failed
+  if ($req->method eq "POST") {
+    $res->body($self->render("login", $dest, "bad username or password"));
   }
-
-  # we have credentials
-  elsif (my $user = $req->param('username')
-     and my $pass = $req->param('password')) {
-
-    $self->authenticate($user, $pass, sub {
-      my $success = shift;
-      if ($success) {
-        $req->env->{"psgix.session"} = {
-          is_logged_in => 1,
-          username     => $user,
-          userid       => $self->user,
-        };
-        $res->redirect($dest);
-      }
-      else {
-        $req->env->{"psgix.session"}{is_logged_in} = 0;
-        $req->env->{"psgix.session.options"}{expire} = 1;
-        $res->body($self->$self->render("login", $dest, "bad username or password"));
-      }
-      $res->send;
-    });
-  }
-
-  # $self->render the login page
   else {
     $res->body($self->render("login", $dest));
-    $res->send;
   }
+  $res->send;
 };
 
 route logout => sub {
