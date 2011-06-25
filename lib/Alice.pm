@@ -201,11 +201,11 @@ sub sorted_windows {
   my $self = shift;
 
   my %o = map {
-    $self->config->order->[$_] => sprintf "%02d", $_ + 2
-  } (0 .. @{$self->config->order} - 1);
+    $self->order->[$_] => sprintf "%02d", $_ + 2
+  } (0 .. @{$self->order} - 1);
 
   $o{$self->info_window->id} = "01";
-  my $prefix = scalar @{$self->config->order} + 1;
+  my $prefix = scalar @{$self->order} + 1;
 
   map  {$_->[1]}
   sort {$a->[0] cmp $b->[0]}
