@@ -137,7 +137,7 @@ Alice.Application = Class.create({
         }
       }.bind(this));
       if ($('servers')) {
-        Alice.connections.connectServer(action.session);
+        Alice.connections.connectServer(action.network);
       }
     },
     disconnect: function (action) {
@@ -148,7 +148,7 @@ Alice.Application = Class.create({
         }
       }.bind(this));
       if ($('servers')) {
-        Alice.connections.disconnectServer(action.session);
+        Alice.connections.disconnectServer(action.network);
       }
     },
     focus: function (action) {
@@ -697,6 +697,26 @@ Alice.Application = Class.create({
     }.bind(this));
   },
 
+  setupTabsetMenu: function() {
+    var click = this.supportsTouch ? "touchend" : "mouseup";
+    $('tabset_menu').observe(click, function(e) {
+      var li = e.findElement(".dropdown li");
+      if (li) {
+        e.stop();
+        var name = li.innerHTML.unescapeHTML();
+
+        if (name == "Edit Sets")
+          this.toggleTabsets();
+        else if (name == "All tabs")
+          this.clearSet(li);
+        else if (this.tabsets[name])
+          this.showSet(name);
+
+        $$('.dropdown.open').invoke("removeClassName", "open");
+      }
+    }.bind(this));
+  },
+
   setupMenus: function() {
     var click = this.supportsTouch ? "touchend" : "mouseup";
 
@@ -722,22 +742,7 @@ Alice.Application = Class.create({
       }
     }.bind(this));
 
-    $('tabset_menu').observe(click, function(e) {
-      var li = e.findElement(".dropdown li");
-      if (li) {
-        e.stop();
-        var name = li.innerHTML.unescapeHTML();
-
-        if (name == "Edit Sets")
-          this.toggleTabsets();
-        else if (name == "All tabs")
-          this.clearSet(li);
-        else if (this.tabsets[name])
-          this.showSet(name);
-
-        $$('.dropdown.open').invoke("removeClassName", "open");
-      }
-    }.bind(this));
+    this.setupTabsetMenu();
 
     ['tab_menu_left', 'tab_menu_right'].each(function(side) {
       $(side).observe(click, function(e) {

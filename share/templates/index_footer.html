@@ -11,7 +11,7 @@
 
             if (alice.options.avatars == "hide") document.body.addClassName('noavatars');
 
-            <? my $tabsets = {map {$_->name => $_->windows } $app->tabsets}; ?>
+            <? my $tabsets = $app->tabsets; ?>
             alice.tabsets = <?= Text::MicroTemplate::encoded_string(JSON::to_json $tabsets, {ascii => 1}) ?>;
 
             <? for my $window (@windows) { ?>
@@ -22,10 +22,10 @@
 
             alice.ready();
 
-            <? if (!$app->connected_ircs) { ?>
+            <? if (!$app->open_connections) { ?>
             alice.toggleConfig();
             <? } ?>
-            <? if ($app->config->first_run) { ?>
+            <? if ($app->first_run) { ?>
             alice.toggleHelp();
             <? } ?>
           });
@@ -47,7 +47,7 @@
         <div id="tabs_container">
           <ul id="tabs">
           <? for my $window (@windows) { ?>
-            <?= $_mt->render_file('tab.html', $_[0], $window) ?>
+            <?= $_mt->render_file('tab.html', $window) ?>
           <? } ?>
           </ul>
         </div>

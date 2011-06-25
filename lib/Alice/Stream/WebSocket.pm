@@ -35,7 +35,6 @@ sub BUILD {
   );
   
   $h->on_error(sub {
-    warn $_[2];
     $self->close;
     undef $h;
     $self->on_error->();

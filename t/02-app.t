@@ -1,17 +1,17 @@
 use Test::More;
-use App::Alice;
-use App::Alice::Test::NullHistory;
+use Alice;
+use Alice::Test::NullHistory;
 use Test::TCP;
 
-my $history = App::Alice::Test::NullHistory->new;
-my $app = App::Alice->new(
+my $history = Alice::Test::NullHistory->new;
+my $app = Alice->new(
   history => $history,
   path => 't/alice',
   file => "test_config",
   port => empty_port(),
 );
 
-$app->add_irc_server("test", {
+$app->add_new_connection("test", {
   nick => "tester",
   host => "not.real.server",
   port => 6667,
@@ -19,25 +19,25 @@ $app->add_irc_server("test", {
 });
 
 # connections
-ok $app->has_irc("test"), "add connection";
-my $irc = $app->get_irc("test");
-is_deeply [$app->ircs], [$irc], "connection list";
+ok $app->has_connection("test"), "add connection";
+my $connection = $app->get_connection("test");
+is_deeply [$app->connections], [$connection], "connection list";
 
 # windows
 my $info = $app->info_window;
 ok $info, "info window";
-my $window = $app->create_window("test-window", $irc);
+my $window = $app->create_window("test-window", $connection);
 ok $window, "create window";
 
 my $window_id = $app->_build_window_id("test-window", "test");
 ok $app->has_window($window_id), "window exists";
-ok $app->find_window("test-window", $irc), "find window by name";
-ok ref $app->get_window($window_id) eq "App::Alice::Window", "get window";
+ok $app->find_window("test-window", $connection), "find window by name";
+ok ref $app->get_window($window_id) eq "Alice::Window", "get window";
 is_deeply [$app->sorted_windows], [$info, $window], "window list";
 
-is_deeply $app->find_or_create_window("test-window", $irc), $window, "find or create existing window";
-my $window2 = $app->find_or_create_window("test-window2", $irc);
-ok $app->find_window("test-window2", $irc), "find or create non-existent window";
+is_deeply $app->find_or_create_window("test-window", $connection), $window, "find or create existing window";
+my $window2 = $app->find_or_create_window("test-window2", $connection);
+ok $app->find_window("test-window2", $connection), "find or create non-existent window";
 $app->remove_window($app->_build_window_id("test-window2", "test"));
 
 $app->close_window($window);

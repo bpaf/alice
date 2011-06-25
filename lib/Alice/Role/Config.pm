@@ -1,25 +1,14 @@
-package Alice::Config;
+package Alice::Role::Config;
 
-use FindBin;
+use Any::Moose 'Role';
+
 use Data::Dumper;
-use File::ShareDir qw/dist_dir/;
 use Getopt::Long;
-use Any::Moose;
 use POSIX;
-
 use AnyEvent::AIO;
 use IO::AIO;
-
-has assetdir => (
-  is      => 'ro',
-  isa     => 'Str',
-  default => sub {
-    if (-e "$FindBin::Bin/../share/templates") {
-      return "$FindBin::Bin/../share";
-    }
-    return dist_dir('App-Alice');
-  }
-);
+use List::MoreUtils qw/any/;
+use AnyEvent::IRC::Util qw/filter_colors/;
 
 has [qw/images avatars alerts/] => (
   is      => 'rw',
@@ -81,10 +70,18 @@ has tabsets => (
   default => sub {{}},
 );
 
-has [qw/ignore highlights order monospace_nicks/]=> (
+has [qw/highlights order monospace_nicks/]=> (
   is      => 'rw',
   isa     => 'ArrayRef[Str]',
   default => sub {[]},
+);
+
+has ignore => (
+  is      => 'rw',
+  isa     => 'HashRef[ArrayRef]',
+  default => sub {
+    +{ msg => [], 'join' => [], part => [] }
+  }
 );
 
 has servers => (
@@ -93,23 +90,17 @@ has servers => (
   default => sub {{}},
 );
 
-has path => (
+has configdir => (
   is      => 'ro',
   isa     => 'Str',
   default => sub {$ENV{ALICE_DIR} || "$ENV{HOME}/.alice"},
 );
 
-has file => (
-  is      => 'ro',
-  isa     => 'Str',
-  default => "config",
-);
-
-has fullpath => (
+has configfile => (
   is      => 'ro',
   isa     => 'Str',
   lazy    => 1,
-  default => sub {$_[0]->path ."/". $_[0]->file},
+  default => sub {$_[0]->configdir ."/config"},
 );
 
 has commandline => (
@@ -130,52 +121,35 @@ has image_prefix => (
   default => 'https://static.usealice.org/i/',
 );
 
-has message_store => (
-  is      => 'rw',
-  isa     => 'Str',
-  default => 'Memory',
-);
-
-has callback => (
-  is      => 'ro',
-  isa     => 'CodeRef',
-);
-
 has enable_logging => (
   is      => 'rw',
   isa     => 'Bool',
   default => 1,
 );
 
-sub ignores {@{$_[0]->ignore}}
-sub add_ignore {push @{shift->ignore}, @_}
-
-sub BUILD {
-  my $self = shift;
-  $self->load;
-  mkdir $self->path unless -d $self->path;
-}
-
-sub load {
+sub loadconfig {
   my $self = shift;
   my $config = {};
 
+  mkdir $self->configdir unless -d $self->configdir;
+
   my $loaded = sub {
     $self->read_commandline_args;
-    $self->merge($config);
-    $self->callback->();
+    $self->mergeconfig($config);
 
-    my $class = "Alice::MessageStore::".$self->message_store;
-    eval "require $class";
-
-    delete $self->{callback};
-    $self->{loaded} = 1;
+    $self->init;
   };
 
-  if (-e $self->fullpath) {
+  if (-e $self->configfile) {
     my $body;
-    aio_load $self->fullpath, $body, sub {
+    aio_load $self->configfile, $body, sub {
       $config = eval $body;
+
+      # upgrade ignore to new format
+      if ($config->{ignore} and ref $config->{ignore} eq "ARRAY") {
+        $config->{ignore} = {msg => $config->{ignore}};
+      }
+
       if ($@) {
         warn "error loading config: $@\n";
       }
@@ -183,8 +157,8 @@ sub load {
     }
   }
   else {
-    say STDERR "No config found, writing a few config to ".$self->fullpath;
-    $self->write($loaded);
+    warn "No config found, writing a few config to ".$self->configfile."\n";
+    $self->writeconfig($loaded);
   }
 }
 
@@ -233,29 +207,31 @@ sub show_debug {
   return $self->debug;
 }
 
-sub merge {
+sub mergeconfig {
   my ($self, $config) = @_;
   for my $key (keys %$config) {
-    if (exists $config->{$key} and my $attr = $self->meta->get_attribute($key)) {
-      $self->$key($config->{$key}) if $attr->has_write_method;
+    if (exists $config->{$key} and my $attr = __PACKAGE__->meta->get_attribute($key)) {
+      $self->$key($config->{$key}) if $attr->{is} eq "rw";
     }
     else {
-      say STDERR "$key is not a valid config option";
+      warn "$key is not a valid config option\n";
     }
   }
 }
 
-sub write {
+sub writeconfig {
   my $self = shift;
   my $callback = pop;
-  mkdir $self->path if !-d $self->path;
-  aio_open $self->fullpath, POSIX::O_CREAT | POSIX::O_WRONLY | POSIX::O_TRUNC, 0644, sub {
+  mkdir $self->configdir if !-d $self->configdir;
+  $self->log(debug => "writing config");
+  aio_open $self->configfile, POSIX::O_CREAT | POSIX::O_WRONLY | POSIX::O_TRUNC, 0644, sub {
     my $fh = shift;
     if ($fh) {
       local $Data::Dumper::Terse = 1;
       local $Data::Dumper::Indent = 1;
       my $config = Dumper $self->serialized;
       aio_write $fh, 0, length $config, $config, 0, sub {
+        $self->log(debug => "done writing config");
         $callback->() if $callback;
       };
     }
@@ -267,14 +243,89 @@ sub write {
 
 sub serialized {
   my $self = shift;
+  my $meta = __PACKAGE__->meta;
   return {
-    map {
-      my $name = $_->name;
-      $name => $self->$name;
-    } grep {$_->has_write_method}
-    $self->meta->get_all_attributes
+    map  {$_ => $self->$_}
+    grep {$meta->get_attribute($_)->{is} eq "rw"}
+    $meta->get_attribute_list
   };
 }
 
-__PACKAGE__->meta->make_immutable;
+sub auth_enabled {
+  my $self = shift;
+
+  $self->auth
+    and ref $self->auth eq 'HASH'
+    and $self->auth->{user}
+    and $self->auth->{pass};
+}
+
+sub authenticate {
+  my ($self, $user, $pass, $cb) = @_;
+  $user ||= "";
+  $pass ||= "";
+  my $success = 1;
+
+  if ($self->auth_enabled) {
+    $success = ($self->auth->{user} eq $user
+               and $self->auth->{pass} eq $pass);
+  }
+
+  $cb->($success);
+}
+
+sub is_highlight {
+  my ($self, $own_nick, $body) = @_;
+  $body = filter_colors $body;
+  any {$body =~ /(?:\W|^)\Q$_\E(?:\W|$)/i }
+      (@{$self->highlights}, $own_nick);
+}
+
+sub is_monospace_nick {
+  my ($self, $nick) = @_;
+  any {$_ eq $nick} @{$self->monospace_nicks};
+}
+
+sub ignores {
+  my ($self, $type) = @_;
+  $type ||= "msg";
+  @{$self->ignore->{$type} || []}
+}
+
+sub is_ignore {
+  my ($self, $type, $nick) = @_;
+  $type ||= "msg";
+  any {$_ eq $nick} $self->ignores($type);
+}
+
+sub add_ignore {
+  my ($self, $type, $nick) = @_;
+  push @{$self->ignore->{$type}}, $nick;
+  $self->writeconfig;
+}
+
+sub remove_ignore {
+  my ($self, $type, $nick) = @_;
+  $self->ignore->{$type} = [ grep {$nick ne $_} $self->ignores($type) ];
+  $self->writeconfig;
+}
+
+sub static_url {
+  my ($self, $file) = @_;
+  return $self->static_prefix . $file;
+}
+
+sub tabset_includes {
+  my ($self, $set, $window_id) = @_;
+  if (my $windows = $self->tabsets->{$set}) {
+    return any {$_ eq $window_id} @$windows;
+  }
+}
+
+before shutdown => sub {
+  my $self = shift;
+  $self->cv->begin;
+  $self->writeconfig(sub{$self->cv->end});
+};
+
 1;

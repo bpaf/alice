@@ -9,8 +9,8 @@
       <h2>Sets</h2>
 
       <ul id="sets" onclick="Alice.tabsets.focusSet(arguments[0])">
-        <? for my $set ($app->tabsets) { ?>
-        <li><?= $set->name ?></li>
+        <? for my $set (keys %{$app->tabsets}) { ?>
+        <li><?= $set ?></li>
         <? } ?>
       </ul>
 
@@ -23,11 +23,11 @@
 
     <div class="config_body" id="tabset_data">
 
-      <? for my $set ($app->tabsets) { ?>
+      <? for my $set (keys %{$app->tabsets}) { ?>
         <ul>
         <? for my $window (@windows) { ?>
           <li>
-            <input type="checkbox"<?= $set->includes($window->id) ? " checked" : "" ?> name="<?= $window->id ?>">
+            <input type="checkbox"<?= $app->tabset_includes($set, $window->id) ? " checked" : "" ?> name="<?= $window->id ?>">
             <?= $window->title ?>
           </li>
         <? } ?>

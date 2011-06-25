@@ -116,6 +116,7 @@ Object.extend(Alice, {
         parameters: Object.toQueryString(params),
         onSuccess: function(transport){
           $('tabset_menu').replace(transport.responseText);
+          alice.setupTabsetMenu();
           Alice.tabsets.remove()
         }
       });

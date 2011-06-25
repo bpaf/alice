@@ -1,4 +1,4 @@
-? my ($app, $msg) = @_;
+? my ($window, $msg, $body) = @_;
 ? my $classes = join " ", (
 ?   grep {$msg->{$_}} qw/highlight self consecutive monospaced avatar/,
 ? );
@@ -12,6 +12,6 @@
       </a>
     </div>
     <div class="msg">
-      <?= $msg->{html} ?>
+      <?= $body ?>
     </div>
 </li>

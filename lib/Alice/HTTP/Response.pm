@@ -1,35 +1,4 @@
-package Alice::Request;
-
-use parent 'Plack::Request';
-use Encode;
-
-sub new {
-  my($class, $env, $cb) = @_;
-
-  Carp::croak(q{$env is required})
-    unless defined $env && ref($env) eq 'HASH';
-  Carp::croak(q{$cb is required})
-    unless defined $cb && ref($cb) eq 'CODE';
-
-  bless { env => $env, cb => $cb }, $class;
-}
-
-sub new_response {
-  my $self = shift;
-  Alice::Response->new($self->{cb}, @_);
-}
-
-sub param {
-  my $self = shift;
-  if (wantarray) {
-    return map {decode("utf8", $_)} $self->SUPER::param(@_);
-  }
-  else {
-    return decode("utf8", $self->SUPER::param(@_));
-  }
-}
-
-package Alice::Response;
+package Alice::HTTP::Response;
 use parent 'Plack::Response';
 use Encode;
 
@@ -43,8 +12,18 @@ sub new {
   $self->status($rc)       if defined $rc;
   $self->headers($headers) if defined $headers;
   $self->body($content)    if defined $content;
+  $self->content_type("text/html; charset=utf-8");
 
   $self;
+}
+
+sub body {
+  my $self = shift;
+
+  my $content = $self->SUPER::body(@_);
+  $self->content_length(length $content) if $content;
+
+  $content;
 }
 
 sub send {
